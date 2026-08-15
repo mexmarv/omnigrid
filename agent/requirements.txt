@@ -1,0 +1,5 @@
+requests
+psutil
+numpy
+onnxruntime
+llama-cpp-python
