@@ -20,14 +20,18 @@ $result = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
     if ($name === '') {
         $error = 'Enter a name.';
+    } elseif ($email === '') {
+        $error = 'Enter an email -- only used if you ever need to reissue your API key or delete this account.';
     } else {
         try {
-            $result = register_account($pdo, $name);
+            $result = register_account($pdo, $name, $email);
             $result['name'] = $name;
         } catch (RuntimeException $ex) {
-            $error = $ex->getMessage() . ' Pick a different name, or if it\'s yours, use the API key you already saved.';
+            $error = $ex->getMessage() . ' Pick a different name, or if it\'s yours, use ' .
+                '<a href="reset.php" style="color:inherit">reset.php</a> to recover access.';
         }
     }
 }
@@ -92,8 +96,9 @@ $hub = hub_base_url();
 <div class="wrap">
   <a class="back" href="index.php">&larr; back to dashboard</a>
   <h1>Get an Omnigrid account</h1>
-  <p class="sub">One name, one API key -- that's the whole account. No password, no email,
-     no recovery if you lose the key, so save it somewhere real the moment you see it.</p>
+  <p class="sub">One name, one API key -- that's the whole account. No password, ever.
+     Your email is only ever used for <a href="reset.php" style="color:var(--accent-2)">reset.php</a>
+     -- reissuing a lost API key or deleting your account -- never for anything else.</p>
 
   <?php if ($result === null): ?>
     <div class="card">
@@ -102,14 +107,18 @@ $hub = hub_base_url();
         <label for="name">Account name</label>
         <input type="text" id="name" name="name" placeholder="e.g. your name or handle"
                value="<?= e($_POST['name'] ?? '') ?>" required>
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="only used to recover this account"
+               value="<?= e($_POST['email'] ?? '') ?>" required>
         <button type="submit">Create account</button>
       </form>
     </div>
   <?php else: ?>
     <div class="card">
       <div class="warn">
-        This key is shown <strong>once</strong>. Copy it now -- there's no recovery flow.
-        It authenticates every request you make as <strong><?= e($result['name']) ?></strong>.
+        This key is shown <strong>once</strong>. Copy it now. If you ever lose it, use
+        <a href="reset.php" style="color:inherit">reset.php</a> to get a new one via email --
+        it authenticates every request you make as <strong><?= e($result['name']) ?></strong>.
       </div>
       <label>Account name</label>
       <div class="key"><?= e($result['name']) ?></div>
@@ -141,18 +150,18 @@ $hub = hub_base_url();
     command: python3
     args: ["/path/to/omnigrid/mcp_server/server.py"]
     env:
-      OMNIGRID_ACCOUNT: "<?= e($result['name']) ?>"
+      OMNIGRID_API_KEY: "<?= e($result['api_key']) ?>"
       OMNIGRID_HUB: "<?= e($hub) ?>"</code></pre>
 
     <h2>Or share compute from the command line</h2>
-    <pre><code>python3 agent.py --name "<?= e($result['name']) ?>" --cpu-cores 2 --ram-mb 2048 \
+    <pre><code>python3 agent.py --api-key "<?= e($result['api_key']) ?>" --cpu-cores 2 --ram-mb 2048 \
     --coordinator <?= e($hub) ?></code></pre>
 
     <h2>Or call it directly from Python</h2>
     <pre><code>import client_sdk as cc
 
 text = cc.run_llm_infer("hello!", model_name="&lt;see dashboard for hosted models&gt;",
-                         account_name="<?= e($result['name']) ?>", coordinator="<?= e($hub) ?>")</code></pre>
+                         api_key="<?= e($result['api_key']) ?>", coordinator="<?= e($hub) ?>")</code></pre>
   <?php endif; ?>
 </div>
 </body>

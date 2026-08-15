@@ -181,16 +181,73 @@ function npy_decode(string $bytes) {
 }
 
 /** Returns ['account_id' => int, 'api_key' => string]. Throws RuntimeException on duplicate name. */
-function register_account(PDO $pdo, string $name): array {
+function register_account(PDO $pdo, string $name, string $email): array {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('That email address looks invalid.');
+    }
     $apiKey = bin2hex(random_bytes(32));
     $hash = hash('sha256', $apiKey);
     try {
-        $stmt = $pdo->prepare('INSERT INTO accounts (name, api_key_hash, credits, created_at) VALUES (?, ?, ?, ?)');
-        $stmt->execute([$name, $hash, STARTING_CREDITS, microtime(true)]);
+        $stmt = $pdo->prepare(
+            'INSERT INTO accounts (name, email, api_key_hash, credits, created_at) VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$name, $email, $hash, STARTING_CREDITS, microtime(true)]);
     } catch (PDOException $e) {
         throw new RuntimeException("Account name '$name' is already registered.");
     }
     return ['account_id' => (int)$pdo->lastInsertId(), 'api_key' => $apiKey];
+}
+
+const RESET_TOKEN_TTL_S = 3600; // 1 hour
+
+/** No password to reset -- this emails a one-time link that lets you reissue your
+ * API key or delete your account. Always call this the same way whether or not
+ * the name/email actually matched, so responses can't be used to enumerate accounts. */
+function request_password_reset(PDO $pdo, string $name, string $email, string $baseUrl): void {
+    $stmt = $pdo->prepare('SELECT id FROM accounts WHERE name = ? AND email = ?');
+    $stmt->execute([$name, $email]);
+    $account = $stmt->fetch();
+    if ($account === false) {
+        return; // silently no-op -- caller shows the same "check your email" message either way
+    }
+
+    $token = bin2hex(random_bytes(32));
+    $stmt = $pdo->prepare('UPDATE accounts SET reset_token_hash = ?, reset_expires = ? WHERE id = ?');
+    $stmt->execute([hash('sha256', $token), microtime(true) + RESET_TOKEN_TTL_S, $account['id']]);
+
+    $link = "$baseUrl/reset.php?token=$token";
+    $body = "Someone (hopefully you) asked to manage the Omnigrid account '$name'.\n\n" .
+        "Reset your API key or delete the account here (link expires in 1 hour):\n$link\n\n" .
+        "If this wasn't you, ignore this email -- nothing happens without clicking the link.";
+    @mail($email, 'Omnigrid account access', $body, "From: no-reply@" . parse_url($baseUrl, PHP_URL_HOST));
+}
+
+/** Returns the account row for a valid, unexpired reset token, or null. */
+function find_account_by_reset_token(PDO $pdo, string $token): ?array {
+    $stmt = $pdo->prepare('SELECT * FROM accounts WHERE reset_token_hash = ?');
+    $stmt->execute([hash('sha256', $token)]);
+    $account = $stmt->fetch();
+    if ($account === false || (float)$account['reset_expires'] < microtime(true)) {
+        return null;
+    }
+    return $account;
+}
+
+/** Issues a fresh API key (invalidating the old one) and clears the reset token. */
+function reissue_api_key(PDO $pdo, int $accountId): string {
+    $apiKey = bin2hex(random_bytes(32));
+    $stmt = $pdo->prepare(
+        'UPDATE accounts SET api_key_hash = ?, reset_token_hash = NULL, reset_expires = NULL WHERE id = ?'
+    );
+    $stmt->execute([hash('sha256', $apiKey), $accountId]);
+    return $apiKey;
+}
+
+/** Deletes the account and any providers it registered. Jobs are left as historical
+ * records (their consumer_account_id/provider_id just won't resolve to anything anymore). */
+function delete_account(PDO $pdo, int $accountId): void {
+    $pdo->prepare('DELETE FROM providers WHERE account_id = ?')->execute([$accountId]);
+    $pdo->prepare('DELETE FROM accounts WHERE id = ?')->execute([$accountId]);
 }
 
 /** Verifies job_id exists and is assigned to a provider owned by $accountId. */

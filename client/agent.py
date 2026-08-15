@@ -66,7 +66,13 @@ def is_idle() -> bool:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--name", required=True, help="account name to credit/debit")
+    parser.add_argument("--name", help="account name to credit/debit -- omit if using --api-key")
+    parser.add_argument("--email",
+                         help="only needed the first time --name registers on this coordinator -- "
+                              "used solely for reset.php (reissue a lost key / delete the account)")
+    parser.add_argument("--api-key",
+                         help="already have a key (e.g. from register.php)? Pass it directly and "
+                              "skip --name/--email entirely.")
     parser.add_argument("--coordinator", default="http://127.0.0.1:8000")
     parser.add_argument("--cpu-cores", type=float, required=True,
                          help="how many CPU cores you're willing to donate")
@@ -84,6 +90,9 @@ def main():
                         help="LLM layers to offload to GPU (-1 = all, 0 = CPU-only). "
                              "Defaults to -1 if a GPU was detected, else 0.")
     args = parser.parse_args()
+
+    if not args.api_key and not args.name:
+        raise SystemExit("Pass either --api-key, or --name (and --email the first time it registers).")
 
     host_cores = psutil.cpu_count(logical=True)
     host_ram_mb = psutil.virtual_memory().total // (1024 * 1024)
@@ -116,7 +125,7 @@ def main():
         if args.llm_model_path:
             print(f"LLM GPU offload: n_gpu_layers={os.environ[GPU_LAYERS_ENV]}")
 
-    api_key = credentials.get_api_key(args.coordinator, args.name)
+    api_key = args.api_key or credentials.get_api_key(args.coordinator, args.name, args.email)
     auth_headers = {"Authorization": f"Bearer {api_key}"}
 
     resp = requests.post(f"{args.coordinator}/api/providers_announce.php", headers=auth_headers, json={

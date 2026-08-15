@@ -40,9 +40,12 @@ function omnigrid_db(): PDO {
     $pdo->exec("CREATE TABLE IF NOT EXISTS accounts (
         id $idType,
         name VARCHAR(255) NOT NULL UNIQUE,
+        email VARCHAR(255) NOT NULL,
         api_key_hash CHAR(64) NOT NULL UNIQUE,
         credits $realType NOT NULL DEFAULT 50.0,
-        created_at $realType NOT NULL
+        created_at $realType NOT NULL,
+        reset_token_hash CHAR(64),
+        reset_expires $realType
     )");
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS providers (

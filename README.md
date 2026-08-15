@@ -1,6 +1,11 @@
-<img src="docs/logo.png" alt="Omnigrid" width="140">
+<p align="center">
+  <img src="docs/logo.png" alt="Omnigrid" width="110">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://github.com/omnigent-ai/omnigent"><img src="docs/omnigent-logo.svg" alt="Omnigent" width="170"></a>
+</p>
 
-# Omnigrid
+<h1 align="center">Omnigrid</h1>
+<p align="center"><b>Community compute for AI agents -- built to plug straight into <a href="https://github.com/omnigent-ai/omnigent">Omnigent</a>.</b></p>
 
 ### Spare compute, shared like a signal -- not sold like a service.
 
@@ -19,6 +24,20 @@ into the same pool. No cloud bill, no plan tiers, no signup form --
 installing the client *is* the account.
 
 **Live network, dashboard, and credit leaderboard: [chanza.ai](https://chanza.ai)**
+
+> ### Connect Omnigent in one block, nothing to install
+> Get a key at [chanza.ai/register.php](https://chanza.ai/register.php), add this to your agent's YAML, done:
+> ```yaml
+> tools:
+>   omnigrid:
+>     type: mcp
+>     url: "https://chanza.ai/mcp.php"
+>     headers:
+>       Authorization: "Bearer your-api-key"
+> ```
+> No Python, no download, no local process -- Omnigent talks straight to the
+> hosted endpoint. Full walkthrough, example prompt, and the local-process
+> alternative: [Use the network](#use-the-network).
 
 ---
 
@@ -72,9 +91,12 @@ cd omnigrid/client
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-python3 agent.py --name "your name" --cpu-cores 2 --ram-mb 2048 \
+python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ram-mb 2048 \
     --coordinator https://chanza.ai
 ```
+
+Already have an API key from [chanza.ai/register.php](https://chanza.ai/register.php)?
+Skip `--name`/`--email` and pass `--api-key` directly instead.
 
 **Got a GPU?** It's used automatically. On Apple Silicon the client
 detects Metal and offloads LLM layers to it; on NVIDIA it does the same
@@ -86,16 +108,18 @@ Have an open-weight GGUF model sitting around (Llama, Mistral, Qwen,
 whatever)? Host it for text generation, GPU offload included:
 
 ```bash
-python3 agent.py --name "your name" --cpu-cores 2 --ram-mb 2048 \
+python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ram-mb 2048 \
     --coordinator https://chanza.ai \
     --llm-model-path /path/to/model.gguf --llm-model-name my-model
 ```
 
 The first run registers you an account (50 free credits to start) and
-caches an API key at `~/.omnigrid/` -- there's no password or recovery,
-so back that folder up if you care about keeping the identity. Every
-job you complete earns credits from whoever consumed it; nobody has to
-trust anybody, the ledger just tracks who's given what.
+caches an API key at `~/.omnigrid/` -- no password, ever. Your email is
+only used by [reset.php](https://chanza.ai/reset.php) if you ever need to
+reissue a lost key or delete the account; back up `~/.omnigrid/` if you'd
+rather not rely on that. Every job you complete earns credits from
+whoever consumed it; nobody has to trust anybody, the ledger just tracks
+who's given what.
 
 <details>
 <summary>What actually happens when a job runs (sequence diagram)</summary>
@@ -127,12 +151,14 @@ sequenceDiagram
 import client_sdk as cc
 import numpy as np
 
-result = cc.run_tensor_op("matmul", a, b, account_name="your name",
+result = cc.run_tensor_op("matmul", a, b, account_name="your name", email="you@example.com",
                            coordinator="https://chanza.ai")
 
 text = cc.run_llm_infer("Explain BitTorrent in one sentence.",
                          model_name="some-hosted-model", account_name="your name",
-                         coordinator="https://chanza.ai")
+                         email="you@example.com", coordinator="https://chanza.ai")
+
+# Already have a key from register.php? Skip account_name/email and pass api_key= instead.
 ```
 
 **From [Omnigent](https://github.com/omnigent-ai/omnigent)** (Databricks'
@@ -264,6 +290,10 @@ any shared host. See [backoffice/HOSTING.md](backoffice/HOSTING.md).
   auth on reading a job's payload/result yet. Fine for non-sensitive data;
   don't send anything private through the network until this is fixed.
 - **No rate limiting.** An account can currently submit as fast as it wants.
+- **Reset emails use PHP's built-in `mail()`.** It works out of the box on
+  most shared hosting, but deliverability to Gmail/Outlook etc. without
+  proper SPF/DKIM records can be spotty. If reset links aren't arriving,
+  that's the first thing to check -- not a bug in the reset logic itself.
 - **No transport encryption is enforced by the code itself** -- put this
   behind HTTPS (Hostinger's free AutoSSL, or any reverse proxy) before
   running it for real. chanza.ai already does.
@@ -300,9 +330,10 @@ when available -- the model itself never crosses the wire, only prompts
 and generation params do). Every job still runs in its own OS subprocess
 with a wall-clock timeout and memory cap, purely to contain crashes -- not
 as a security boundary, since there's nothing untrusted to contain.
-Accounts authenticate with an API key (no password, no email); the
-backoffice enforces that you can only announce as, or report results for,
-providers you actually own.
+Accounts authenticate with an API key, never a password -- email is
+collected only so `reset.php` can send a one-time link to reissue a lost
+key or delete the account. The backoffice enforces that you can only
+announce as, or report results for, providers you actually own.
 
 Two ways to reach it as an MCP tool, both exposing the same three tools:
 `mcp_server/server.py` (Python, stdio, run locally) and `backoffice/mcp.php`
