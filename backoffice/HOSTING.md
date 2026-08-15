@@ -18,7 +18,11 @@ php -S 127.0.0.1:8000
 ```
 
 That's it -- a full backoffice is now running at `http://127.0.0.1:8000`.
-Open it in a browser to see the dashboard, or:
+Open it in a browser to see the dashboard, and visit `/register.php` to
+create an account and see an API key -- that page also generates the
+Omnigent YAML block and CLI command with your name/key already filled in,
+so it doubles as the "how do I configure my multi-harness" answer for
+whoever's looking at the dashboard. Or check everything's alive via curl:
 
 ```bash
 curl http://127.0.0.1:8000/api/stats.php

@@ -3,9 +3,29 @@ require_once __DIR__ . '/lib.php';
 $pdo = omnigrid_db();
 
 $cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;
-$stmt = $pdo->prepare('SELECT COUNT(*) AS n FROM providers WHERE last_heartbeat >= ?');
+$stmt = $pdo->prepare('SELECT cpu_cores, ram_mb, gpu_model, task_types FROM providers WHERE last_heartbeat >= ?');
 $stmt->execute([$cutoff]);
-$online = (int)$stmt->fetch()['n'];
+$onlineProviders = $stmt->fetchAll();
+
+$online = count($onlineProviders);
+$totalCores = 0.0;
+$totalRamMb = 0;
+$gpuProviders = 0;
+$hostedModels = [];
+foreach ($onlineProviders as $p) {
+    $totalCores += (float)$p['cpu_cores'];
+    $totalRamMb += (int)$p['ram_mb'];
+    if (!empty($p['gpu_model'])) {
+        $gpuProviders++;
+    }
+    foreach (explode(',', $p['task_types']) as $taskType) {
+        if (str_starts_with($taskType, 'llm_infer:')) {
+            $hostedModels[] = substr($taskType, strlen('llm_infer:'));
+        }
+    }
+}
+$hostedModels = array_values(array_unique($hostedModels));
+sort($hostedModels);
 
 $jobs = $pdo->query(
     "SELECT COUNT(*) AS total, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done, " .
@@ -35,12 +55,15 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
                        radial-gradient(circle at 85% 20%, rgba(110,231,200,0.10), transparent 40%);
   }
   .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 80px; }
-  .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-  .logo .mark {
-    width: 36px; height: 36px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  }
+  .logo { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .logo img { width: 48px; height: 48px; border-radius: 12px; }
   h1 { font-size: 28px; margin: 0; letter-spacing: -0.02em; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--accent);
+  }
   .tagline { color: var(--muted); margin: 6px 0 40px; font-size: 15px; }
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 40px; }
   .card {
@@ -79,7 +102,7 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 </head>
 <body>
 <div class="wrap">
-  <div class="logo"><div class="mark"></div><h1>Omnigrid</h1></div>
+  <div class="logo"><img src="assets/logo.png" alt="Omnigrid"><h1>Omnigrid</h1></div>
   <p class="tagline">Community-run spare CPU/RAM/GPU, and open-model LLM inference --
      shared, not sold. This page is the live backoffice for chanza.ai's hub.</p>
 
@@ -88,6 +111,28 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
     <div class="card"><div class="value"><?= $computeHours ?></div><div class="label">compute-hours donated</div></div>
     <div class="card"><div class="value"><?= (int)($jobs['done'] ?? 0) ?> / <?= (int)($jobs['total'] ?? 0) ?></div><div class="label">jobs completed</div></div>
   </div>
+
+  <h2>Being shared for free, right now</h2>
+  <?php if ($online === 0): ?>
+    <div class="empty">Nobody's online right now -- <a href="register.php" style="color:var(--accent-2)">be the first to share something</a>.</div>
+  <?php else: ?>
+    <div class="card" style="margin-bottom:20px;">
+      <p style="margin:0 0 12px; color:var(--muted); font-size:14px;">
+        <?= $totalCores ?> CPU cores and <?= number_format($totalRamMb / 1024, 1) ?> GB RAM
+        donated across <?= $online ?> machine<?= $online === 1 ? '' : 's' ?><?= $gpuProviders > 0 ? " ($gpuProviders with a GPU)" : '' ?>.
+      </p>
+      <?php if (!empty($hostedModels)): ?>
+        <p style="margin:0 0 10px; color:var(--muted); font-size:13px;">LLM models available for text generation:</p>
+        <div class="tags">
+          <?php foreach ($hostedModels as $model): ?>
+            <span class="tag"><?= e($model) ?></span>
+          <?php endforeach; ?>
+        </div>
+      <?php else: ?>
+        <p style="margin:0; color:var(--muted); font-size:13px;">No one's hosting an LLM for generation right now -- only raw compute (tensor ops, ONNX inference).</p>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
 
   <h2>Credit leaderboard</h2>
   <?php if (empty($leaderboard)): ?>
@@ -103,8 +148,8 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 
   <div class="cta">
     <p>Donate spare CPU/RAM/GPU, or point your Omnigent agent at community-hosted
-       open models -- both are one command away.</p>
-    <a href="https://github.com/mexmarv/omnigrid">Get started on GitHub &rarr;</a>
+       open models -- both start with an account and an API key.</p>
+    <a href="register.php">Get your API key &rarr;</a>
   </div>
 
   <footer>Nothing here executes remote code -- providers only ever run their own

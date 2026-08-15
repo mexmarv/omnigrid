@@ -56,6 +56,19 @@ function require_auth(PDO $pdo): array {
     return $account;
 }
 
+/** Returns ['account_id' => int, 'api_key' => string]. Throws RuntimeException on duplicate name. */
+function register_account(PDO $pdo, string $name): array {
+    $apiKey = bin2hex(random_bytes(32));
+    $hash = hash('sha256', $apiKey);
+    try {
+        $stmt = $pdo->prepare('INSERT INTO accounts (name, api_key_hash, credits, created_at) VALUES (?, ?, ?, ?)');
+        $stmt->execute([$name, $hash, STARTING_CREDITS, microtime(true)]);
+    } catch (PDOException $e) {
+        throw new RuntimeException("Account name '$name' is already registered.");
+    }
+    return ['account_id' => (int)$pdo->lastInsertId(), 'api_key' => $apiKey];
+}
+
 /** Verifies job_id exists and is assigned to a provider owned by $accountId. */
 function require_owns_job_provider(PDO $pdo, int $jobId, int $accountId): array {
     $stmt = $pdo->prepare('SELECT * FROM jobs WHERE id = ?');

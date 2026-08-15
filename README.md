@@ -1,4 +1,6 @@
-<img src="docs/logo.svg" alt="Omnigrid" width="420">
+<img src="docs/logo.png" alt="Omnigrid" width="140">
+
+# Omnigrid
 
 ### Spare compute, shared like a signal -- not sold like a service.
 
@@ -135,7 +137,9 @@ text = cc.run_llm_infer("Explain BitTorrent in one sentence.",
 
 **From [Omnigent](https://github.com/omnigent-ai/omnigent)** (Databricks'
 open-source meta-harness -- one agent definition, any harness: Claude Code,
-Codex, Cursor, and more), point your agent at the network as an MCP tool:
+Codex, Cursor, and more), point your agent at the network as an MCP tool.
+This is the whole point of the integration, so here's the complete path,
+not just a snippet.
 
 ```mermaid
 flowchart LR
@@ -149,25 +153,67 @@ flowchart LR
     B --> N
 ```
 
-Add three lines to your agent's YAML:
+**1. Get an account and API key.** Visit `https://chanza.ai/register.php`
+(or `http://127.0.0.1:8000/register.php` if you're running your own
+backoffice locally), pick a name, and you'll get an API key shown once --
+save it. The same page also hands you the exact YAML block below with your
+name and key already filled in, so you don't have to copy-paste-and-edit.
+
+**2. Check what's actually available to use.** The dashboard at
+`chanza.ai` (or your own backoffice's `/`) lists every model currently
+being hosted for free under "Being shared for free, right now" -- that's
+what you can ask for by name in step 4. In this repo's own local testing,
+for instance, that list has included a small instruction-tuned model
+(`smollm2-135m`, ~135M parameters, someone's spare CPU/GPU keeping it warm).
+
+**3. Add the tool to your agent's YAML.** Omnigent agents are defined in a
+YAML file with a `prompt`, an `executor` (which harness/model runs it),
+and a `tools` section -- adapting the shape from
+[Omnigent's own Agent YAML spec](https://github.com/omnigent-ai/omnigent/blob/main/docs/AGENT_YAML_SPEC.md):
 
 ```yaml
+name: my_agent
+prompt: |
+  You are a helpful assistant with access to the Omnigrid community
+  compute network via the omnigrid tool.
+executor:
+  harness: claude-sdk   # or codex, cursor, etc. -- whatever you're already using
+  model: your-model-here
 tools:
   omnigrid:
     type: mcp
     command: python3
     args: ["/path/to/omnigrid/mcp_server/server.py"]
     env:
-      OMNIGRID_ACCOUNT: "your name"
-      OMNIGRID_HUB: "https://chanza.ai"
+      OMNIGRID_ACCOUNT: "your name"        # from step 1
+      OMNIGRID_HUB: "https://chanza.ai"    # or your own backoffice's URL
 ```
 
-That gives the agent three tools: `list_models` (what's currently hosted),
-`offload_llm_generate`, and `offload_tensor_op`. This is *not* a way to
-share access to your paid Claude/Codex/etc. account or its credentials --
-Omnigent's own session-sharing deliberately keeps those on your machine,
-and this integration follows the same rule. It only ever reaches
-self-hosted, open-weight models someone chose to donate.
+(`executor:` varies by which harness/model you're actually running --
+adjust it to match your existing Omnigent setup; the `tools:` block is the
+part that's specific to this project.)
+
+**4. Run it and ask for the shared resource by name.**
+
+```bash
+omnigent run my_agent.yaml
+```
+
+Then, in the chat, just ask for it in plain language -- for example:
+
+> List the models available on Omnigrid, then use whichever one is hosted
+> to write a two-sentence summary of why octopuses are considered
+> intelligent.
+
+The agent calls `list_models` to see `smollm2-135m` is available, then
+`offload_llm_generate` to actually run the prompt on the community-hosted
+GPU/CPU behind it -- text comes back into your conversation like any other
+tool result, except the compute for it happened on someone else's machine.
+
+This is *not* a way to share access to your paid Claude/Codex/etc. account
+or its credentials -- Omnigent's own session-sharing deliberately keeps
+those on your machine, and this integration follows the same rule. It only
+ever reaches self-hosted, open-weight models someone chose to donate.
 
 ## Run it yourself, right now
 
