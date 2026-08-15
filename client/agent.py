@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import os
+import platform
 import subprocess
 import time
 
@@ -21,19 +22,21 @@ import handlers
 import sandbox
 
 try:
-    from handlers.llm_infer import MODEL_PATH_ENV
+    from handlers.llm_infer import GPU_LAYERS_ENV, MODEL_PATH_ENV
 except ImportError:
     MODEL_PATH_ENV = "OMNIGRID_LLM_MODEL_PATH"
+    GPU_LAYERS_ENV = "OMNIGRID_LLM_GPU_LAYERS"
 
 IDLE_CPU_THRESHOLD = 30.0  # percent; only fetch work below this, unless --ignore-idle
 
 
 def detect_gpu():
-    """Best-effort NVIDIA GPU detection via nvidia-smi. Returns (model, vram_mb) or (None, None).
+    """Best-effort GPU detection. Returns (model, vram_mb_or_None).
 
-    Non-NVIDIA GPUs (e.g. Apple Silicon) aren't detected here yet -- onnx_infer
-    only requests CPUExecutionProvider today, so GPU capacity donation is
-    NVIDIA-only for now.
+    Tries NVIDIA (nvidia-smi) first, then Apple Silicon (unified memory, so
+    there's no separate VRAM figure to report -- None instead). Verified for
+    real on Apple Silicon: llama.cpp's own device-init log confirms Metal is
+    engaged and all layers offload when n_gpu_layers is set (see llm_infer.py).
     """
     try:
         out = subprocess.check_output(
@@ -43,7 +46,18 @@ def detect_gpu():
         name, mem = out.strip().split("\n")[0].split(",")
         return name.strip(), int(mem.strip())
     except Exception:
-        return None, None
+        pass
+
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        try:
+            chip = subprocess.check_output(
+                ["sysctl", "-n", "machdep.cpu.brand_string"], timeout=5, text=True
+            ).strip()
+        except Exception:
+            chip = "Apple Silicon"
+        return f"{chip} (Metal)", None
+
+    return None, None
 
 
 def is_idle() -> bool:
@@ -66,6 +80,9 @@ def main():
     parser.add_argument("--llm-model-name",
                          help="short name for the model, advertised as task_type "
                               "'llm_infer:<name>' (required if --llm-model-path is set)")
+    parser.add_argument("--gpu-layers", type=int, default=None,
+                        help="LLM layers to offload to GPU (-1 = all, 0 = CPU-only). "
+                             "Defaults to -1 if a GPU was detected, else 0.")
     args = parser.parse_args()
 
     host_cores = psutil.cpu_count(logical=True)
@@ -88,12 +105,16 @@ def main():
                 "llama-cpp-python isn't installed, so this agent can't serve llm_infer. "
                 "pip install llama-cpp-python and try again."
             )
+        gpu_layers = args.gpu_layers if args.gpu_layers is not None else (-1 if gpu_model else 0)
         os.environ[MODEL_PATH_ENV] = args.llm_model_path
+        os.environ[GPU_LAYERS_ENV] = str(gpu_layers)
         task_types.append(f"llm_infer:{args.llm_model_name}")
 
     print(f"Installed handlers: {task_types}")
     if gpu_model:
-        print(f"GPU detected: {gpu_model} ({gpu_vram_mb} MB)")
+        print(f"GPU detected: {gpu_model}" + (f" ({gpu_vram_mb} MB)" if gpu_vram_mb else ""))
+        if args.llm_model_path:
+            print(f"LLM GPU offload: n_gpu_layers={os.environ[GPU_LAYERS_ENV]}")
 
     api_key = credentials.get_api_key(args.coordinator, args.name)
     auth_headers = {"Authorization": f"Bearer {api_key}"}

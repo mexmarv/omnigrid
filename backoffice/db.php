@@ -1,7 +1,7 @@
 <?php
 /**
- * Database connection + schema bootstrap. Supports MySQL (recommended for
- * Hostinger shared hosting) or SQLite, picked by the DSN in config.php.
+ * Database connection + schema bootstrap. Supports SQLite (the default --
+ * simple, no separate service) or MySQL, picked by the DSN in config.php.
  */
 
 function omnigrid_db(): PDO {
@@ -14,10 +14,18 @@ function omnigrid_db(): PDO {
     if (!file_exists($configPath)) {
         http_response_code(500);
         header('Content-Type: application/json');
-        echo json_encode(['detail' => 'config.php is missing -- copy config.example.php to config.php and fill in your database details.']);
+        echo json_encode(['detail' => 'config.php is missing -- copy config.example.php to config.php.']);
         exit;
     }
     $config = require $configPath;
+
+    if (str_starts_with($config['dsn'], 'sqlite:')) {
+        $sqlitePath = substr($config['dsn'], strlen('sqlite:'));
+        $dir = dirname($sqlitePath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+    }
 
     $pdo = new PDO($config['dsn'], $config['db_user'] ?? null, $config['db_pass'] ?? null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

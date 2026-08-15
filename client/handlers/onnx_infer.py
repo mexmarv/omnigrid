@@ -3,9 +3,16 @@ onnx_infer -- run a given ONNX model on a given input tensor.
 
 ONNX is a fixed graph-of-predefined-operators format, not a scripting
 language: loading one doesn't grant arbitrary code execution the way
-unpickling an untrusted object graph would. We still only use the default
-CPU/CUDA execution providers (no custom-op models), and cap wall-clock time
-the same as every other handler via the sandbox layer.
+unpickling an untrusted object graph would. No custom-op models are
+accepted, and wall-clock time is capped the same as every other handler
+via the sandbox layer.
+
+GPU: the provider list below tries CoreML (Apple Silicon), then CUDA
+(NVIDIA), then falls back to CPU. onnxruntime silently skips whichever
+providers aren't compiled into the installed build (verified -- listing
+CUDAExecutionProvider on a machine without it just logs a warning and
+moves on, it doesn't crash), so this is safe on every platform even though
+only the CoreML path has actually been exercised on real GPU hardware here.
 
 Payload (a JSON object, base64-encoded at the wire level):
 {
@@ -32,7 +39,10 @@ def run(payload_b64: str) -> str:
     model_bytes = base64.b64decode(payload["model_onnx_b64"])
     input_array = decode_npy_b64(payload["input_npy_b64"])
 
-    session = ort.InferenceSession(model_bytes, providers=["CPUExecutionProvider"])
+    session = ort.InferenceSession(
+        model_bytes,
+        providers=["CoreMLExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
     input_name = payload.get("input_name") or session.get_inputs()[0].name
     outputs = session.run(None, {input_name: input_array})
 

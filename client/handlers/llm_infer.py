@@ -22,6 +22,13 @@ Result: {"text": "<generated text>"}
 Known limitation (see README): the model is reloaded from disk on every job
 because each job runs in a fresh sandboxed subprocess. Fine for a prototype;
 a warm, persistent worker would be needed for real throughput.
+
+GPU offload: if agent.py detected a GPU (Apple Silicon Metal, or NVIDIA via
+--gpu-layers), OMNIGRID_LLM_GPU_LAYERS is set and passed straight through as
+llama.cpp's n_gpu_layers. Verified for real on Apple Silicon (all layers
+offload to Metal, confirmed via llama.cpp's own device-init log) --
+the CUDA path uses the same llama-cpp-python mechanism but hasn't been
+tested on NVIDIA hardware here.
 """
 
 import os
@@ -33,6 +40,7 @@ from safe_io import decode_json_payload, encode_json_result
 from .base import handler
 
 MODEL_PATH_ENV = "OMNIGRID_LLM_MODEL_PATH"
+GPU_LAYERS_ENV = "OMNIGRID_LLM_GPU_LAYERS"
 
 
 @handler("llm_infer")
@@ -40,6 +48,7 @@ def run(payload_b64: str) -> str:
     model_path = os.environ.get(MODEL_PATH_ENV)
     if not model_path:
         raise RuntimeError(f"No LLM model configured on this provider (${MODEL_PATH_ENV} unset).")
+    gpu_layers = int(os.environ.get(GPU_LAYERS_ENV, "0"))
 
     payload = decode_json_payload(payload_b64)
     prompt = payload["prompt"]
@@ -47,7 +56,7 @@ def run(payload_b64: str) -> str:
     max_tokens = int(payload.get("max_tokens", 128))
     temperature = float(payload.get("temperature", 0.7))
 
-    llm = Llama(model_path=model_path, n_ctx=2048, verbose=False)
+    llm = Llama(model_path=model_path, n_ctx=2048, n_gpu_layers=gpu_layers, verbose=False)
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
