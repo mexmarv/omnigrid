@@ -32,7 +32,7 @@ from safe_io import decode_json_payload, encode_json_result
 
 from .base import handler
 
-MODEL_PATH_ENV = "COMPUTE_COMMONS_LLM_MODEL_PATH"
+MODEL_PATH_ENV = "OMNIGRID_LLM_MODEL_PATH"
 
 
 @handler("llm_infer")

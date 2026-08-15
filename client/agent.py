@@ -23,7 +23,7 @@ import sandbox
 try:
     from handlers.llm_infer import MODEL_PATH_ENV
 except ImportError:
-    MODEL_PATH_ENV = "COMPUTE_COMMONS_LLM_MODEL_PATH"
+    MODEL_PATH_ENV = "OMNIGRID_LLM_MODEL_PATH"
 
 IDLE_CPU_THRESHOLD = 30.0  # percent; only fetch work below this, unless --ignore-idle
 
@@ -98,7 +98,7 @@ def main():
     api_key = credentials.get_api_key(args.coordinator, args.name)
     auth_headers = {"Authorization": f"Bearer {api_key}"}
 
-    resp = requests.post(f"{args.coordinator}/providers/announce", headers=auth_headers, json={
+    resp = requests.post(f"{args.coordinator}/api/providers_announce.php", headers=auth_headers, json={
         "cpu_cores": args.cpu_cores,
         "ram_mb": args.ram_mb,
         "gpu_model": gpu_model,
@@ -116,14 +116,15 @@ def main():
             continue
 
         # re-announce doubles as a heartbeat so we drop out of the directory if this exits
-        requests.post(f"{args.coordinator}/providers/announce", headers=auth_headers, json={
+        requests.post(f"{args.coordinator}/api/providers_announce.php", headers=auth_headers, json={
             "provider_id": provider_id,
             "cpu_cores": args.cpu_cores, "ram_mb": args.ram_mb,
             "gpu_model": gpu_model, "gpu_vram_mb": gpu_vram_mb, "task_types": task_types,
         })
 
         job_resp = requests.get(
-            f"{args.coordinator}/providers/{provider_id}/next-job", headers=auth_headers
+            f"{args.coordinator}/api/providers_next_job.php",
+            params={"provider_id": provider_id}, headers=auth_headers,
         )
         if job_resp.status_code == 204:
             time.sleep(args.poll_interval)
@@ -137,13 +138,13 @@ def main():
         )
 
         if status == "done":
-            requests.post(f"{args.coordinator}/jobs/result", headers=auth_headers, json={
+            requests.post(f"{args.coordinator}/api/jobs_result.php", headers=auth_headers, json={
                 "job_id": job["id"], "result_format": "json",
                 "result_b64": result_b64, "compute_seconds": compute_seconds,
             }).raise_for_status()
             print(f"job #{job['id']} done in {compute_seconds:.2f}s")
         else:
-            requests.post(f"{args.coordinator}/jobs/failure", headers=auth_headers, json={
+            requests.post(f"{args.coordinator}/api/jobs_failure.php", headers=auth_headers, json={
                 "job_id": job["id"], "error": error,
             }).raise_for_status()
             print(f"job #{job['id']} failed: {error}")

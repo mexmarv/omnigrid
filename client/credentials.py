@@ -1,10 +1,10 @@
 """
-Registers an account with a hub once, then caches the API key locally so
-later runs reuse the same identity instead of re-registering.
+Registers an account with a backoffice once, then caches the API key locally
+so later runs reuse the same identity instead of re-registering.
 
 There's no password, no email, no recovery -- the cached key file IS the
-account. Back up ~/.compute-commons/ if you care about keeping your credits
-and provider identity.
+account. Back up ~/.omnigrid/ if you care about keeping your credits and
+provider identity.
 """
 
 import json
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import requests
 
-CRED_DIR = Path.home() / ".compute-commons"
+CRED_DIR = Path.home() / ".omnigrid"
 
 
 def _cred_path(coordinator: str, name: str) -> Path:
@@ -25,12 +25,12 @@ def get_api_key(coordinator: str, name: str) -> str:
     if path.exists():
         return json.loads(path.read_text())["api_key"]
 
-    resp = requests.post(f"{coordinator}/accounts/register", json={"name": name})
+    resp = requests.post(f"{coordinator}/api/accounts_register.php", json={"name": name})
     if resp.status_code == 409:
         raise RuntimeError(
             f"Account '{name}' is already registered on {coordinator}, but you don't have "
             f"its API key cached locally (no file at {path}). There's no recovery for a lost "
-            f"key -- pick a different name, or restore your ~/.compute-commons/ backup."
+            f"key -- pick a different name, or restore your ~/.omnigrid/ backup."
         )
     resp.raise_for_status()
     api_key = resp.json()["api_key"]

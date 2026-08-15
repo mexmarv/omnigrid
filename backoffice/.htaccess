@@ -1,0 +1,10 @@
+# Many Apache/CGI shared-hosting setups (including some PHP-CGI configs)
+# strip the Authorization header before PHP ever sees it. This restores it.
+RewriteEngine On
+RewriteCond %{HTTP:Authorization} ^(.*)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+
+# config.php holds real database credentials -- never serve it directly.
+<Files "config.php">
+    Require all denied
+</Files>

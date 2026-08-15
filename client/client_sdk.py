@@ -21,7 +21,7 @@ def _submit(coordinator, account_name, task_type, payload: dict, cpu_limit, ram_
     api_key = credentials.get_api_key(coordinator, account_name)
     payload_b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
     resp = requests.post(
-        f"{coordinator}/jobs/submit",
+        f"{coordinator}/api/jobs_submit.php",
         headers={"Authorization": f"Bearer {api_key}"},
         json={
             "task_type": task_type, "payload_format": "json", "payload_b64": payload_b64,
@@ -35,7 +35,7 @@ def _submit(coordinator, account_name, task_type, payload: dict, cpu_limit, ram_
 def _wait_for_result(coordinator, job_id, poll_interval=1.0, max_wait_s=300) -> dict:
     start = time.time()
     while time.time() - start < max_wait_s:
-        resp = requests.get(f"{coordinator}/jobs/{job_id}")
+        resp = requests.get(f"{coordinator}/api/jobs_get.php", params={"id": job_id})
         resp.raise_for_status()
         job = resp.json()
         if job["status"] == "done":

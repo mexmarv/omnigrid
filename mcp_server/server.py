@@ -1,17 +1,17 @@
 """
-Exposes the compute-commons network as MCP tools, so any Omnigent-driven
-agent (Claude Code, Codex, Cursor, custom agents -- any harness) can reach
+Exposes the Omnigrid network as MCP tools, so any Omnigent-driven agent
+(Claude Code, Codex, Cursor, custom agents -- any harness) can reach
 community-hosted open models and compute as a tool call, via one line in
 its agent YAML:
 
     tools:
-      compute_commons:
+      omnigrid:
         type: mcp
         command: python3
-        args: ["/path/to/compute-commons/mcp_server/server.py"]
+        args: ["/path/to/omnigrid/mcp_server/server.py"]
         env:
-          COMPUTE_COMMONS_ACCOUNT: "your name"
-          COMPUTE_COMMONS_HUB: "http://your-hub:8000"
+          OMNIGRID_ACCOUNT: "your name"
+          OMNIGRID_HUB: "https://chanza.ai/backoffice"
 
 Nothing here changes the underlying security model: the tool still only
 ever sends prompts/tensors (data) to the network, never code, and the
@@ -23,23 +23,23 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "agent"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "client"))
 
 import requests
 from mcp.server.mcpserver import MCPServer
 
 import client_sdk as cc
 
-HUB = os.environ.get("COMPUTE_COMMONS_HUB", "http://127.0.0.1:8000")
-ACCOUNT = os.environ.get("COMPUTE_COMMONS_ACCOUNT", "anonymous")
+HUB = os.environ.get("OMNIGRID_HUB", "http://127.0.0.1:8000")
+ACCOUNT = os.environ.get("OMNIGRID_ACCOUNT", "anonymous")
 
-mcp = MCPServer("compute-commons")
+mcp = MCPServer("omnigrid")
 
 
 @mcp.tool()
 def list_models() -> list[str]:
-    """List LLM models currently hosted by online providers on the compute-commons network."""
-    resp = requests.get(f"{HUB}/providers")
+    """List LLM models currently hosted by online providers on the Omnigrid network."""
+    resp = requests.get(f"{HUB}/api/providers_list.php")
     resp.raise_for_status()
     models = set()
     for provider in resp.json():
