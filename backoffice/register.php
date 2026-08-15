@@ -119,9 +119,21 @@ $hub = hub_base_url();
 
     <h2>Configure Omnigent</h2>
     <p class="sub" style="margin-bottom:12px;">
-      Add this to your agent's YAML under <code>tools:</code> -- see the
+      Nothing to install -- add this to your agent's YAML under <code>tools:</code>
+      and it points straight at the hosted MCP endpoint. See the
       <a href="https://github.com/mexmarv/omnigrid#use-the-network" style="color:var(--accent-2)">full walkthrough</a>
-      for a complete example and what to actually type into the chat once it's wired up.
+      for what to actually type into the chat once it's wired up.
+    </p>
+    <pre><code>tools:
+  omnigrid:
+    type: mcp
+    url: "<?= e($hub) ?>/mcp.php"
+    headers:
+      Authorization: "Bearer <?= e($result['api_key']) ?>"</code></pre>
+
+    <p class="sub" style="margin:16px 0 6px; font-size:13px;">
+      Prefer running your own local MCP process instead of the hosted one (e.g. for a
+      private setup)? Same three tools, no server round-trip:
     </p>
     <pre><code>tools:
   omnigrid:

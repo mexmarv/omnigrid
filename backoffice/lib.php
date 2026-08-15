@@ -41,19 +41,143 @@ function get_bearer_token(): ?string {
     return trim(substr($header, 7));
 }
 
+/** Non-exiting lookup (unlike require_auth) -- for callers with their own error format, e.g. mcp.php. */
+function find_account_by_api_key(PDO $pdo, string $apiKey): array|false {
+    $stmt = $pdo->prepare('SELECT * FROM accounts WHERE api_key_hash = ?');
+    $stmt->execute([hash('sha256', $apiKey)]);
+    return $stmt->fetch();
+}
+
 function require_auth(PDO $pdo): array {
     $token = get_bearer_token();
     if ($token === null) {
         json_error("Missing 'Authorization: Bearer <api_key>' header.", 401);
     }
-    $hash = hash('sha256', $token);
-    $stmt = $pdo->prepare('SELECT * FROM accounts WHERE api_key_hash = ?');
-    $stmt->execute([$hash]);
-    $account = $stmt->fetch();
+    $account = find_account_by_api_key($pdo, $token);
     if ($account === false) {
         json_error('Invalid API key.', 401);
     }
     return $account;
+}
+
+/** task_type strings look like "llm_infer:<model-name>" -- this returns the model names,
+ * deduped, from whichever providers are currently online. */
+function list_hosted_models(PDO $pdo): array {
+    $cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;
+    $stmt = $pdo->prepare('SELECT task_types FROM providers WHERE last_heartbeat >= ?');
+    $stmt->execute([$cutoff]);
+    $models = [];
+    foreach ($stmt->fetchAll() as $row) {
+        foreach (explode(',', $row['task_types']) as $taskType) {
+            if (str_starts_with($taskType, 'llm_infer:')) {
+                $models[] = substr($taskType, strlen('llm_infer:'));
+            }
+        }
+    }
+    $models = array_values(array_unique($models));
+    sort($models);
+    return $models;
+}
+
+/** Inserts a queued job and blocks (server-side poll loop) until it's done/failed or
+ * $maxWaitS elapses. Used by mcp.php, where a single HTTP request must synchronously
+ * return a result -- there's no separate client-side poll step like client_sdk.py has. */
+function submit_job_and_wait(PDO $pdo, int $accountId, string $taskType, string $payloadB64,
+                              float $cpuLimit, int $ramLimitMb, int $timeoutS, int $maxWaitS): array {
+    $stmt = $pdo->prepare(
+        'INSERT INTO jobs (consumer_account_id, task_type, payload_format, payload_b64, cpu_limit, ' .
+        'ram_limit_mb, gpu_required, timeout_s, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)'
+    );
+    $stmt->execute([$accountId, $taskType, 'json', $payloadB64, $cpuLimit, $ramLimitMb, $timeoutS, microtime(true)]);
+    $jobId = (int)$pdo->lastInsertId();
+
+    $deadline = microtime(true) + $maxWaitS;
+    while (microtime(true) < $deadline) {
+        usleep(300000); // 300ms
+        $stmt = $pdo->prepare('SELECT * FROM jobs WHERE id = ?');
+        $stmt->execute([$jobId]);
+        $job = $stmt->fetch();
+        if ($job['status'] === 'done' || $job['status'] === 'failed') {
+            return $job;
+        }
+    }
+    return ['status' => 'timeout', 'job_id' => $jobId, 'error' => "No provider completed this within {$maxWaitS}s."];
+}
+
+/** Flattens a nested PHP array into [flatFloatValues, shape]. */
+function npy_flatten($data): array {
+    if (!is_array($data)) {
+        return [[(float)$data], []];
+    }
+    if (count($data) === 0) {
+        return [[], [0]];
+    }
+    if (!is_array($data[0])) {
+        return [array_map('floatval', $data), [count($data)]];
+    }
+    $flat = [];
+    $innerShape = null;
+    foreach ($data as $row) {
+        [$rowFlat, $rowShape] = npy_flatten($row);
+        $flat = array_merge($flat, $rowFlat);
+        $innerShape = $rowShape;
+    }
+    return [$flat, array_merge([count($data)], $innerShape)];
+}
+
+/** Encodes a (possibly nested) PHP array as float64 .npy bytes -- byte-verified
+ * against real numpy.load() for 2D, 1D, and scalar inputs. */
+function npy_encode($data): string {
+    [$flat, $shape] = npy_flatten($data);
+    $shapeStr = count($shape) === 0 ? '()' : (count($shape) === 1 ? "({$shape[0]},)" : '(' . implode(', ', $shape) . ')');
+    $header = "{'descr': '<f8', 'fortran_order': False, 'shape': $shapeStr, }";
+    $prefixLen = 10 + strlen($header) + 1; // +1 for the trailing \n
+    $padding = (64 - ($prefixLen % 64)) % 64;
+    $header .= str_repeat(' ', $padding) . "\n";
+    $out = "\x93NUMPY\x01\x00" . pack('v', strlen($header)) . $header;
+    foreach ($flat as $v) {
+        $out .= pack('e', $v);
+    }
+    return $out;
+}
+
+function npy_reshape(array $flat, array $shape) {
+    if (count($shape) === 0) {
+        return $flat[0];
+    }
+    if (count($shape) === 1) {
+        return $flat;
+    }
+    $chunkSize = intdiv(count($flat), $shape[0]);
+    $rest = array_slice($shape, 1);
+    $out = [];
+    for ($i = 0; $i < $shape[0]; $i++) {
+        $out[] = npy_reshape(array_slice($flat, $i * $chunkSize, $chunkSize), $rest);
+    }
+    return $out;
+}
+
+/** Decodes float64 .npy bytes back into a (possibly nested) PHP array or scalar --
+ * byte-verified against genuine numpy-written files. */
+function npy_decode(string $bytes) {
+    if (substr($bytes, 0, 6) !== "\x93NUMPY") {
+        throw new RuntimeException('Not a valid .npy file.');
+    }
+    $headerLen = unpack('v', substr($bytes, 8, 2))[1];
+    $header = substr($bytes, 10, $headerLen);
+    $dataOffset = 10 + $headerLen;
+
+    if (!preg_match("/'descr':\s*'([^']+)'/", $header, $m) || $m[1] !== '<f8') {
+        throw new RuntimeException("Unsupported .npy dtype: $header");
+    }
+    preg_match("/'shape':\s*\(([^)]*)\)/", $header, $sm);
+    $shapeStr = trim($sm[1]);
+    $shape = $shapeStr === '' ? [] : array_map('intval', array_filter(array_map('trim', explode(',', $shapeStr)), fn($s) => $s !== ''));
+
+    $count = $shape === [] ? 1 : array_product($shape);
+    $values = array_values(unpack('e' . $count, substr($bytes, $dataOffset, $count * 8)));
+
+    return npy_reshape($values, $shape);
 }
 
 /** Returns ['account_id' => int, 'api_key' => string]. Throws RuntimeException on duplicate name. */

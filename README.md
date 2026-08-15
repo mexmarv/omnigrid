@@ -137,18 +137,18 @@ text = cc.run_llm_infer("Explain BitTorrent in one sentence.",
 
 **From [Omnigent](https://github.com/omnigent-ai/omnigent)** (Databricks'
 open-source meta-harness -- one agent definition, any harness: Claude Code,
-Codex, Cursor, and more), point your agent at the network as an MCP tool.
-This is the whole point of the integration, so here's the complete path,
-not just a snippet.
+Codex, Cursor, and more), point your agent at the network as an MCP tool --
+**hosted, so there's nothing to install.** This is the whole point of the
+integration, so here's the complete path, not just a snippet.
 
 ```mermaid
 flowchart LR
     A["Your Omnigent agent\n(Claude Code / Codex / Cursor / custom)"]
-    M["mcp_server/server.py\n(this repo)"]
+    M["chanza.ai/mcp.php\n(hosted, no install)"]
     B[("Omnigrid backoffice")]
     N["Community providers"]
 
-    A -- "tools: omnigrid (MCP)" --> M
+    A -- "tools: omnigrid\n(url + API key)" --> M
     M -- "offload_llm_generate /\noffload_tensor_op" --> B
     B --> N
 ```
@@ -166,9 +166,11 @@ what you can ask for by name in step 4. In this repo's own local testing,
 for instance, that list has included a small instruction-tuned model
 (`smollm2-135m`, ~135M parameters, someone's spare CPU/GPU keeping it warm).
 
-**3. Add the tool to your agent's YAML.** Omnigent agents are defined in a
-YAML file with a `prompt`, an `executor` (which harness/model runs it),
-and a `tools` section -- adapting the shape from
+**3. Add the tool to your agent's YAML** -- point `url:` at the hosted
+endpoint, no download, no local process, no Python required on your side
+at all. Omnigent agents are defined in a YAML file with a `prompt`, an
+`executor` (which harness/model runs it), and a `tools` section --
+adapting the shape from
 [Omnigent's own Agent YAML spec](https://github.com/omnigent-ai/omnigent/blob/main/docs/AGENT_YAML_SPEC.md):
 
 ```yaml
@@ -182,12 +184,34 @@ executor:
 tools:
   omnigrid:
     type: mcp
+    url: "https://chanza.ai/mcp.php"     # or your own backoffice's URL
+    headers:
+      Authorization: "Bearer your-api-key-from-step-1"
+```
+
+`backoffice/mcp.php` implements MCP's Streamable HTTP transport directly in
+PHP -- verified against the real `mcp` Python client library, not just
+"looks like the spec." Same three tools, same security model (data only,
+never code); the only thing that moved is where the server runs.
+
+<details>
+<summary>Prefer a local process instead of the hosted endpoint?</summary>
+
+If you'd rather run your own MCP process (e.g. a fully private setup, or
+you just don't want a network hop), `mcp_server/server.py` does the same
+three tools over stdio -- requires Python + this repo checked out locally:
+
+```yaml
+tools:
+  omnigrid:
+    type: mcp
     command: python3
     args: ["/path/to/omnigrid/mcp_server/server.py"]
     env:
-      OMNIGRID_ACCOUNT: "your name"        # from step 1
-      OMNIGRID_HUB: "https://chanza.ai"    # or your own backoffice's URL
+      OMNIGRID_ACCOUNT: "your name"
+      OMNIGRID_HUB: "https://chanza.ai"
 ```
+</details>
 
 (`executor:` varies by which harness/model you're actually running --
 adjust it to match your existing Omnigent setup; the `tools:` block is the
@@ -246,6 +270,14 @@ any shared host. See [backoffice/HOSTING.md](backoffice/HOSTING.md).
 - **The LLM handler reloads the model from disk on every job** (each job
   runs in a fresh sandboxed subprocess). Fine for small models; a
   persistent warm worker per model would be the real fix.
+- **The hosted MCP endpoint (`mcp.php`) caps how long it'll wait for a
+  result at 20 seconds.** It blocks synchronously inside one HTTP request
+  while polling for a provider to finish, and shared hosting typically
+  kills PHP scripts around 30s regardless -- found by actually testing a
+  longer wait and watching it get killed mid-request, not assumed. A slow
+  provider or a big model can outrun that; you'll get a clear "still
+  processing" message with the job_id rather than a silent hang, but the
+  result itself won't come back through that same call.
 - **GPU support is verified on Apple Silicon; the CUDA path is untested**
   on real NVIDIA hardware here (it uses the same llama-cpp-python/onnxruntime
   mechanism, and falls back safely if unavailable, but hasn't been run on
@@ -271,3 +303,12 @@ as a security boundary, since there's nothing untrusted to contain.
 Accounts authenticate with an API key (no password, no email); the
 backoffice enforces that you can only announce as, or report results for,
 providers you actually own.
+
+Two ways to reach it as an MCP tool, both exposing the same three tools:
+`mcp_server/server.py` (Python, stdio, run locally) and `backoffice/mcp.php`
+(hosted, HTTP) -- the latter hand-implements the JSON-RPC subset of MCP's
+Streamable HTTP transport needed for a stateless tools-only server (no
+session state, no SSE), including a from-scratch but numpy-byte-verified
+encoder/decoder for the `.npy` tensor format so `offload_tensor_op`'s
+payloads are readable by the same Python `tensor_op` handler every other
+path uses.
