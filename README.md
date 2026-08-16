@@ -11,6 +11,10 @@
 
 ---
 
+<p align="center">
+  <img src="backoffice/assets/SETI@home_logo.png" alt="SETI@home logo" width="260">
+</p>
+
 In 1999, SETI@home let millions of ordinary computers donate their idle
 CPU cycles to a single shared goal: sift through radio-telescope noise
 for a signal that might mean we're not alone. It worked because giving
@@ -454,6 +458,44 @@ That's the whole surface area. Nothing here is a general-purpose remote
 shell or a way to run arbitrary code -- these four operations, and
 whatever a provider's own machine decides to do with the data it's handed,
 are the entire vocabulary of the network.
+
+## Where the savings actually come from
+
+It's easy to assume "offload this to Omnigrid" just moves the same cost
+somewhere else. It doesn't -- here's exactly what's happening and why it's
+not just bookkeeping:
+
+- **The inference itself runs on the provider's own machine, not
+  chanza.ai's server.** `agent.py` loads the model with `llama.cpp`
+  locally and uses whatever GPU it detects (Metal on Apple Silicon, CUDA
+  on NVIDIA) -- confirmed for real, not assumed: `agent.py`'s own startup
+  log prints `GPU detected: Apple M4 (Metal)` before it ever touches a
+  job, and a round trip through `offload_vlm_generate` returned a real
+  answer in under a second, backed by that machine's own compute. The
+  backoffice (`chanza.ai`) never runs a model itself -- `backoffice/mcp.php`
+  and `lib.php` only do matchmaking, the job queue, and the credit ledger.
+- **That means the expensive part -- the actual forward passes through
+  the model -- happens on donated compute, for free, instead of being
+  billed against whatever paid model is driving your agent.** The only
+  cost to your paying model (Claude, GPT, etc.) is the small overhead of
+  the tool-call round trip itself: the prompt going out, and the returned
+  text coming back into its context. That's a few hundred tokens, not the
+  cost of generating a whole response from scratch.
+- **This isn't free in some hidden sense either -- it's a real trade,
+  just a different currency.** The provider spends real CPU/GPU cycles
+  and electricity; the ledger tracks that as credits (bragging rights,
+  not a spendable balance -- see the limitations section). Nobody's
+  compute vanishes; it just comes from whoever chose to donate it instead
+  of from a metered API bill.
+
+Worth being honest about the flip side, too: quality and latency are
+entirely whatever the current provider's hardware and model can deliver
+-- a 135M-parameter model answers fast but shallow, a slow home connection
+adds real round-trip latency, and (per
+["anyone can host anything"](#honest-limitations----read-before-relying-on-this-for-anything-serious))
+there's no guarantee the model behind a given name is what it claims to
+be. The savings are real; so are the tradeoffs that come with pooling
+compute you don't control.
 
 ## Share your compute
 
