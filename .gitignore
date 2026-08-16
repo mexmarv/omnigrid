@@ -8,3 +8,4 @@ backoffice/data/
 .DS_Store
 client/run_*.sh
 client/models.yaml
+client/examples/*.jsonl

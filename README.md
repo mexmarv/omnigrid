@@ -499,6 +499,49 @@ name for whatever's actually listed on [chanza.ai](https://chanza.ai) if
 > its `result_b64` field to JSON and read the `text` field -- that's what
 > it sees.
 
+## Example: building a fine-tuning dataset with donated compute
+
+Matrix multiplication demos the plumbing, but it's not a reason anyone
+would actually want this network. Here's a real chunk of work instead:
+generating a synthetic instruction-tuning dataset -- the "self-instruct"
+style data prep people already do by hand when building their own model.
+
+Be clear about what this is *not*: Omnigrid can't do distributed
+pretraining or fine-tuning itself. That needs synchronized gradients and
+shared optimizer state across machines; this network is a job queue where
+any provider can pick up any job and drop offline anytime, with no shared
+state between jobs. Wrong tool for that.
+
+What it's genuinely good at is exactly this shape: N independent
+`llm_infer` jobs, one per topic, each asking whichever model is currently
+hosted to write instruction/response pairs for that topic. No
+coordination needed between jobs -- every provider online works a
+different topic in parallel, and you collect the results into a training
+file.
+
+[`client/examples/build_finetune_dataset.py`](client/examples/build_finetune_dataset.py)
+does exactly this, using `client_sdk.run_llm_infer` under the hood:
+
+```bash
+cd client
+.venv/bin/python3 examples/build_finetune_dataset.py --api-key YOUR_KEY
+```
+
+Run for real against a single donated M4 Mac hosting `qwen3-8b-m4`, 5
+topics fanned out concurrently produced 12 real training pairs in
+`finetune_dataset.jsonl` (one topic's response ran past `max_output_tokens`
+mid-JSON and got skipped rather than silently truncated -- worth raising
+`max_tokens` for longer topics):
+
+```json
+{"instruction": "What is photosynthesis and how does it work?", "response": "Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy. It occurs in the chloroplasts of plant cells and involves the absorption of sunlight, carbon dioxide from the air, and water from the soil to produce glucose and oxygen."}
+{"instruction": "What is the main difference between TCP and UDP?", "response": "The main difference is that TCP is a connection-oriented protocol that ensures reliable, ordered, and error-checked delivery of data, while UDP is a connectionless protocol that prioritizes speed over reliability."}
+```
+
+Swap `TOPICS` in the script for your own list (or feed it from a corpus of
+source documents) and it scales the same way: more providers online means
+more topics processed at once, for free.
+
 ## Where the savings actually come from
 
 It's easy to assume "offload this to Omnigrid" just moves the same cost
