@@ -113,8 +113,8 @@ def run_vlm_infer(prompt: str, *, model_name: str, image_bytes: bytes | None = N
                    coordinator="http://127.0.0.1:8000", max_tokens=512,
                    cpu_limit=1.0, ram_limit_mb=512, timeout_s=60, max_wait_s=300) -> str:
     """Offload a vision-language prompt (optionally with an image) to a provider
-    hosting `model_name` -- typically a free NVIDIA-hosted model, relayed through
-    the provider's own API key. Only the prompt/image data travels over the wire.
+    hosting `model_name` -- a GGUF vision-language model running on that
+    provider's own machine. Only the prompt/image data travels over the wire.
     """
     payload = {"prompt": prompt, "max_tokens": max_tokens}
     if image_bytes:

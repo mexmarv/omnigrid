@@ -5,12 +5,6 @@ const HEARTBEAT_TIMEOUT_S = 60;
 const STARTING_CREDITS = 50.0;
 const CREDIT_RATE_PER_RESOURCE_SECOND = 1.0;
 
-// Floor for the NVIDIA relay's max_tokens -- reasoning models can burn
-// through a small budget entirely on internal reasoning and never reach a
-// final answer (see call_nvidia_vlm's null-content handling below). Whatever
-// a caller asks for, never hand NVIDIA less room than this to actually finish.
-const NVIDIA_MIN_MAX_TOKENS = 2048;
-
 function json_input(): array {
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
@@ -66,69 +60,6 @@ function require_auth(PDO $pdo): array {
     return $account;
 }
 
-/** Vision-language models this backoffice itself relays to directly, configured in
- * config.php's optional 'nvidia_models' key -- e.g.:
- *   'nvidia_models' => ['my-vision-model' => ['api_key' => 'nvapi-...', 'model_id' => '...']]
- * No separate always-on client process needed for these: the backoffice server
- * (already running 24/7) calls NVIDIA directly with the configured key when asked,
- * the same way a Python provider's vlm_infer handler would -- just without needing
- * a machine of your own to leave on. The key never leaves this server. */
-function nvidia_hosted_models(): array {
-    return omnigrid_config()['nvidia_models'] ?? [];
-}
-
-/** Relays a prompt (+ optional image) to NVIDIA's hosted NIM API and returns the
- * generated text. Mirrors client/handlers/nvidia_vlm.py's request shape exactly. */
-function call_nvidia_vlm(string $modelId, string $apiKey, string $prompt,
-                          ?string $imageB64, string $imageMime, int $maxTokens): string {
-    $maxTokens = max($maxTokens, NVIDIA_MIN_MAX_TOKENS);
-    $content = $prompt;
-    if ($imageB64 !== null) {
-        $content = [
-            ['type' => 'text', 'text' => $prompt],
-            ['type' => 'image_url', 'image_url' => ['url' => "data:$imageMime;base64,$imageB64"]],
-        ];
-    }
-    $ch = curl_init('https://integrate.api.nvidia.com/v1/chat/completions');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 120, // a floored max_tokens can mean a slow reasoning model runs long
-        CURLOPT_HTTPHEADER => ["Authorization: Bearer $apiKey", 'Content-Type: application/json'],
-        CURLOPT_POSTFIELDS => json_encode([
-            'model' => $modelId,
-            'messages' => [['role' => 'user', 'content' => $content]],
-            'max_tokens' => $maxTokens,
-        ]),
-    ]);
-    $body = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    // no curl_close() -- deprecated as of PHP 8.5, and has had no effect since PHP 8.0
-
-    if ($body === false) {
-        throw new RuntimeException("Could not reach NVIDIA's API: $curlError");
-    }
-    $data = json_decode($body, true);
-    if ($status !== 200) {
-        $detail = $data['error']['message'] ?? $body;
-        throw new RuntimeException("NVIDIA API error ($status): $detail");
-    }
-    $content = $data['choices'][0]['message']['content'] ?? null;
-    if ($content === null) {
-        // Reasoning models can burn the whole max_tokens budget on their
-        // internal reasoning before ever emitting a final answer, leaving
-        // content null -- that used to violate this function's `: string`
-        // return type and crash as an uncaught TypeError instead of a
-        // readable error.
-        $finishReason = $data['choices'][0]['finish_reason'] ?? 'unknown';
-        throw new RuntimeException(
-            "Model produced no final answer (finish_reason: $finishReason) -- " .
-            "it likely hit max_tokens while still reasoning. Try again with a higher max_tokens."
-        );
-    }
-    return $content;
-}
-
 /** task_type strings look like "llm_infer:<model-name>" or "vlm_infer:<model-name>" --
  * this pulls the model name out of either family, or null if it's neither. */
 function model_name_from_task_type(string $taskType): ?string {
@@ -154,7 +85,6 @@ function list_hosted_models(PDO $pdo): array {
             }
         }
     }
-    $models = array_merge($models, array_keys(nvidia_hosted_models()));
     $models = array_values(array_unique($models));
     sort($models);
     return $models;
@@ -186,7 +116,6 @@ function dashboard_snapshot(PDO $pdo): array {
             }
         }
     }
-    $hostedModels = array_merge($hostedModels, array_keys(nvidia_hosted_models()));
     $hostedModels = array_values(array_unique($hostedModels));
     sort($hostedModels);
 

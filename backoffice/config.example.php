@@ -18,18 +18,6 @@ return [
     // address, since your domain's mail server already has its own
     // SPF/DKIM set up.
     'mail_from' => 'no-reply@chanza.ai',
-
-    // Optional: share a free build.nvidia.com vision-language model directly from
-    // this server -- no separate always-on client process needed, since relaying
-    // to NVIDIA's API is just an outbound HTTP call this already-running PHP
-    // process can make itself. Uncomment and fill in your own key:
-    //
-    // 'nvidia_models' => [
-    //     'my-vision-model' => [
-    //         'api_key' => 'nvapi-your-own-key',
-    //         'model_id' => 'meta/llama-3.2-90b-vision-instruct',
-    //     ],
-    // ],
 ];
 
 // MySQL instead, if you'd rather use a managed database (e.g. you already

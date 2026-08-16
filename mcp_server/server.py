@@ -78,8 +78,8 @@ def offload_llm_generate(prompt: str, model_name: str, max_tokens: int = 256,
 def offload_vlm_generate(prompt: str, model_name: str, image_b64: str | None = None,
                           image_mime: str = "image/jpeg", max_tokens: int = 512) -> str:
     """Generate text from a prompt and an optional image using a community-hosted
-    vision-language model (e.g. a free NVIDIA-hosted model relayed through a
-    provider's own API key). Use list_models() first to see what's available.
+    vision-language model running on a provider's own machine. Use list_models()
+    first to see what's available.
     """
     import base64
     image_bytes = base64.b64decode(image_b64) if image_b64 else None

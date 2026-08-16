@@ -341,15 +341,9 @@ is involved** -- `offload_llm_generate` is text-only and has no field for
 an image at all, so asking for it by name on an image prompt just silently
 drops the picture.
 
-**Only sharing (or only consuming) the free NVIDIA vision-language relay,
-with no `agent.py` client process running?** `offload_llm_generate` and
-`offload_vlm_generate` both respond right away for an NVIDIA-hosted model --
-the backoffice detects it's config-only and relays to NVIDIA synchronously
-either way (text-only through `offload_llm_generate`, since that path has
-no image field or `temperature`/`system` support against NVIDIA). Only
-`offload_tensor_op` needs an actual CPU/RAM/GPU provider online to ever
-finish; without one it just returns a `job_id` that stays `queued` forever
-in `check_job_result`. Confirmed against the live network on both counts.
+Every one of these needs an actual provider online for that model name --
+`agent.py` running somewhere, hosting it. Without one, a call just returns
+a `job_id` that stays `queued` forever in `check_job_result`.
 
 For the image-plus-text row, whether the image data actually reaches the
 tool call depends on whether your harness bridges attached images into MCP
@@ -420,7 +414,7 @@ Three resources, all optional, all combinable on one machine:
 | **CPU + RAM** | `tensor_op` (matmul/add/multiply/relu/sum/mean), `onnx_infer` (any supplied ONNX model) | Baseline -- every provider offers this, no GPU required. |
 | **GPU** | `onnx_infer` and `llm_infer` | Detected automatically and used without extra config -- see below. Not yet wired up for `tensor_op` (still plain CPU numpy there; honest gap, not a hidden one). |
 | **An LLM you already have** (any GGUF file -- Llama, Mistral, Qwen, whatever) | `llm_infer` | You host one specific model under a name of your choosing; only prompts and generation params ever cross the wire, never the model itself. |
-| **A free NVIDIA-hosted vision-language model** (your own [build.nvidia.com](https://build.nvidia.com) API key -- no local model, no local GPU needed) | `vlm_infer` | You relay prompts (and optionally images) to NVIDIA's free NIM API using your own key; only that key ever leaves your machine, never through chanza.ai or to whoever's consuming it. |
+| **A vision-language model you already have** (any GGUF file with a matching mmproj vision projector -- SmolVLM, LLaVA, Qwen2-VL, whatever `llama.cpp`'s multimodal support handles) | `vlm_infer` | Same pattern as `llm_infer`: you host one specific model + its projector file, offloaded to GPU automatically; only the prompt (and optionally an image) crosses the wire. |
 
 **How the GPU actually gets used**, concretely:
 - `onnx_infer` tries execution providers in order -- **CoreML** (Apple Silicon), then **CUDA** (NVIDIA), then falls back to plain CPU if neither is compiled into the installed `onnxruntime`. This applies automatically to any ONNX job your machine picks up, no flag needed.
@@ -474,38 +468,20 @@ python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ra
     --llm-model-path /path/to/model.gguf --llm-model-name my-model
 ```
 
-No GGUF file and no GPU, but you do have a free [build.nvidia.com](https://build.nvidia.com)
-API key? Share that instead -- no local model or GPU required at all,
-since the actual inference runs on NVIDIA's own infrastructure. This is
-the one resource here that's *just* a credential relaying an HTTP call,
-not real local compute -- which means it doesn't need a client process
-running on a machine you leave on:
+Have a GGUF vision-language model (plus its mmproj vision projector file)
+sitting around? Host it for image recognition, same GPU offload as
+`llm_infer`:
 
-- **Run your own backoffice (e.g. self-hosting per below)?** Add an
-  `nvidia_models` entry to `config.php` (see `config.example.php`) and
-  you're done -- the backoffice itself relays to NVIDIA directly, the key
-  never leaves that server, and it shows up in `list_models` with zero
-  separate processes running.
-- **Using someone else's backoffice (e.g. chanza.ai) instead?** Run the
-  client, same as any other resource -- this one just happens not to need
-  real CPU/RAM behind it:
+```bash
+python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 1 --ram-mb 512 \
+    --coordinator https://chanza.ai \
+    --vlm-model-path /path/to/model.gguf --vlm-mmproj-path /path/to/mmproj.gguf \
+    --vlm-model-name my-vision-model
+```
 
-  ```bash
-  python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 1 --ram-mb 512 \
-      --coordinator https://chanza.ai \
-      --nvidia-api-key "nvapi-your-own-key" --nvidia-model-name my-vision-model
-  ```
-
-Either way, defaults to `meta/llama-3.2-90b-vision-instruct` -- a free,
-general vision-language model capable of image recognition (object/scene
-identification, describing what's happening in a photo, including sports
-and activities) -- override with `--nvidia-model-id` (client) or
-`model_id` (config.php) to point at a different one from NVIDIA's
-[catalog](https://build.nvidia.com/models). The key never crosses the
-network to whoever's consuming the model, either way. NVIDIA's free tier
-is rate-limited (historically around 40 requests/minute); expect
-`check_job_result` polling to take a little longer under heavy use rather
-than a hard failure.
+Small models built for edge/laptop use work well here -- e.g.
+[SmolVLM-256M-Instruct](https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF)
+runs comfortably on a laptop CPU/Metal and answers in under a second.
 
 The first run registers you an account (50 free credits to start) and
 caches an API key at `~/.omnigrid/` -- no password, ever. Your email is

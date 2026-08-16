@@ -6,3 +6,4 @@ models/
 backoffice/config.php
 backoffice/data/
 .DS_Store
+client/run_*.sh

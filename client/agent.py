@@ -27,8 +27,11 @@ except ImportError:
     MODEL_PATH_ENV = "OMNIGRID_LLM_MODEL_PATH"
     GPU_LAYERS_ENV = "OMNIGRID_LLM_GPU_LAYERS"
 
-from handlers.nvidia_vlm import API_KEY_ENV as NVIDIA_API_KEY_ENV
-from handlers.nvidia_vlm import MODEL_ID_ENV as NVIDIA_MODEL_ID_ENV
+try:
+    from handlers.vlm_infer import MMPROJ_PATH_ENV, MODEL_PATH_ENV as VLM_MODEL_PATH_ENV
+except ImportError:
+    VLM_MODEL_PATH_ENV = "OMNIGRID_VLM_MODEL_PATH"
+    MMPROJ_PATH_ENV = "OMNIGRID_VLM_MMPROJ_PATH"
 
 IDLE_CPU_THRESHOLD = 30.0  # percent; only fetch work below this, unless --ignore-idle
 
@@ -92,15 +95,13 @@ def main():
     parser.add_argument("--gpu-layers", type=int, default=None,
                         help="LLM layers to offload to GPU (-1 = all, 0 = CPU-only). "
                              "Defaults to -1 if a GPU was detected, else 0.")
-    parser.add_argument("--nvidia-api-key",
-                         help="your own free build.nvidia.com API key (nvapi-...) -- stays on this "
-                              "machine, never sent to the coordinator or exposed to consumers.")
-    parser.add_argument("--nvidia-model-id", default="meta/llama-3.2-90b-vision-instruct",
-                         help="the NIM model ID to call on build.nvidia.com (default: a free vision-"
-                              "language model that handles general image recognition).")
-    parser.add_argument("--nvidia-model-name",
+    parser.add_argument("--vlm-model-path", help="path to a GGUF vision-language model file to host")
+    parser.add_argument("--vlm-mmproj-path",
+                         help="path to that model's vision projector (mmproj) GGUF file "
+                              "(required if --vlm-model-path is set)")
+    parser.add_argument("--vlm-model-name",
                          help="short name for the model, advertised as task_type "
-                              "'vlm_infer:<name>' (required if --nvidia-api-key is set).")
+                              "'vlm_infer:<name>' (required if --vlm-model-path is set)")
     args = parser.parse_args()
 
     if not args.api_key and not args.name:
@@ -132,12 +133,19 @@ def main():
         os.environ[GPU_LAYERS_ENV] = str(gpu_layers)
         task_types.append(f"llm_infer:{args.llm_model_name}")
 
-    if args.nvidia_api_key:
-        if not args.nvidia_model_name:
-            raise SystemExit("--nvidia-model-name is required when --nvidia-api-key is set.")
-        os.environ[NVIDIA_API_KEY_ENV] = args.nvidia_api_key
-        os.environ[NVIDIA_MODEL_ID_ENV] = args.nvidia_model_id
-        task_types.append(f"vlm_infer:{args.nvidia_model_name}")
+    if args.vlm_model_path:
+        if not args.vlm_mmproj_path:
+            raise SystemExit("--vlm-mmproj-path is required when --vlm-model-path is set.")
+        if not args.vlm_model_name:
+            raise SystemExit("--vlm-model-name is required when --vlm-model-path is set.")
+        if handlers.get_handler("vlm_infer") is None:
+            raise SystemExit(
+                "llama-cpp-python isn't installed, so this agent can't serve vlm_infer. "
+                "pip install llama-cpp-python and try again."
+            )
+        os.environ[VLM_MODEL_PATH_ENV] = args.vlm_model_path
+        os.environ[MMPROJ_PATH_ENV] = args.vlm_mmproj_path
+        task_types.append(f"vlm_infer:{args.vlm_model_name}")
 
     print(f"Installed handlers: {task_types}")
     if gpu_model:
