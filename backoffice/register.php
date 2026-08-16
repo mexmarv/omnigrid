@@ -129,7 +129,7 @@ $hub = hub_base_url();
       <div class="copyable"><?= e($result['api_key']) ?></div>
     </div>
 
-    <h2>Configure Omnigent</h2>
+    <h2><img src="assets/omnigent-icon.svg" width="16" height="16" style="vertical-align:-3px;margin-right:6px;">Configure Omnigent</h2>
     <div class="warn" style="margin-bottom:16px;">
       <strong>Connect a host first</strong> -- Omnigent sessions execute on
       a "host" (your own machine or a Databricks-managed sandbox), not the
@@ -141,6 +141,19 @@ omni login &lt;your-workspace-url&gt;
 omni host --server &lt;your-workspace-url&gt;</code></pre>
       Keep that running and pick the host it registers before continuing.
     </div>
+    <p class="sub" style="margin-bottom:12px;">
+      <b>Pick a harness</b> (Claude SDK, Codex, Cursor, Antigravity, etc. --
+      omnigrid is just an MCP tool, it works the same under any of them;
+      confirmed end-to-end on Antigravity specifically). <b>Expect an
+      approval prompt</b> the first time each tool (<code>list_models</code>,
+      <code>offload_llm_generate</code>, <code>offload_tensor_op</code>) is
+      actually called -- that's Omnigent's policy system pausing on a new
+      tool's first use, not a sign anything is broken. If every call keeps
+      re-asking instead of just the first, the harness likely isn't
+      persisting the tool registration (e.g. a sandbox blocking a global
+      config write outside your project folder) -- that's a harness-side
+      permissions issue, not an omnigrid one.
+    </p>
     <p class="sub" style="margin-bottom:12px;">
       Easiest: paste this into Omnigent's "Describe a task to start a new
       session..." box and it writes the agent + MCP config for you:

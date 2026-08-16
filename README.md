@@ -44,7 +44,7 @@ that's what you ask for by name once it's wired up.
 `https://chanza.ai/mcp.php`, or your own backoffice's URL if self-hosting):
 
 <details>
-<summary><b>Omnigent</b> -- Databricks' open-source meta-harness</summary>
+<summary><img src="docs/icons/omnigent-icon.svg" width="18" height="18" align="absmiddle"> <b>Omnigent</b> -- open-source meta-harness</summary>
 
 **Connect a host first, or nothing below will actually run.** Omnigent
 sessions execute on a "host" -- your own machine, or a Databricks-managed
@@ -64,6 +64,21 @@ omni host --server <your-workspace-url>
 URL Omnigent's own "Connect a host" dialog shows you, pre-filled into that
 exact command.) Keep that process running, pick the host it registers
 from the session's host menu, *then* wire up the MCP tool below.
+
+**Pick a harness for the session** -- Claude SDK, Codex, Cursor, Antigravity,
+and others are all valid engines to run the agent itself; omnigrid is just
+an MCP tool that plugs into whichever one you pick. Confirmed working
+end-to-end on Antigravity specifically -- a real `offload_llm_generate`
+call completed against a live provider through it.
+
+**Expect an approval prompt the first time each tool is actually called** --
+`list_models`, `offload_llm_generate`, and `offload_tensor_op` each show up
+as their own tool in Omnigent's policy system, and the default policy is to
+pause and ask before a *new* tool's first call, not to auto-allow it. If
+every single call keeps re-asking rather than just the first one, that's
+usually the harness failing to persist the tool registration (e.g. a
+global config write outside your project directory getting silently
+denied by the sandbox) rather than anything wrong with omnigrid itself.
 
 Omnigent has an actual **Create custom agent** form -- Name, Description,
 Harness, Model, System instructions, and an **MCP Tools &rarr; + Add
@@ -139,7 +154,7 @@ tools:
 </details>
 
 <details>
-<summary><b>Claude Code</b></summary>
+<summary><img src="https://img.shields.io/badge/-Claude_Code-D97757?style=flat-square&logo=claude&logoColor=white" align="absmiddle"></summary>
 
 ```bash
 claude mcp add --transport http omnigrid https://chanza.ai/mcp.php \
@@ -163,7 +178,7 @@ Or add it directly to `.mcp.json` (project scope, shareable via git) or
 </details>
 
 <details>
-<summary><b>Claude Desktop</b></summary>
+<summary><img src="https://img.shields.io/badge/-Claude_Desktop-D97757?style=flat-square&logo=claude&logoColor=white" align="absmiddle"></summary>
 
 Remote MCP servers are added through the UI, not a config file:
 **Settings &rarr; Connectors &rarr; Add custom connector**, URL
@@ -178,7 +193,7 @@ it may not be enabled for your account.
 </details>
 
 <details>
-<summary><b>Cursor</b></summary>
+<summary><img src="https://img.shields.io/badge/-Cursor-000000?style=flat-square&logo=cursor&logoColor=white" align="absmiddle"></summary>
 
 Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
 
@@ -195,7 +210,7 @@ Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
 </details>
 
 <details>
-<summary><b>Codex CLI</b></summary>
+<summary><img src="https://img.shields.io/badge/-Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white" align="absmiddle"></summary>
 
 Add to `~/.codex/config.toml` (or `.codex/config.toml` for a trusted project):
 
@@ -207,7 +222,7 @@ http_headers = { Authorization = "Bearer your-api-key" }
 </details>
 
 <details>
-<summary><b>ChatGPT</b></summary>
+<summary><img src="https://img.shields.io/badge/-ChatGPT-412991?style=flat-square&logo=openai&logoColor=white" align="absmiddle"></summary>
 
 ChatGPT's connectors (Settings &rarr; Connectors, needs Developer Mode
 enabled, paid plans only) do support adding a remote MCP server by URL --
@@ -221,7 +236,7 @@ supported path.
 </details>
 
 <details>
-<summary><b>Python script or notebook</b></summary>
+<summary><img src="https://img.shields.io/badge/-Python_script_or_notebook-3776AB?style=flat-square&logo=python&logoColor=white" align="absmiddle"></summary>
 
 ```bash
 git clone https://github.com/mexmarv/omnigrid.git
