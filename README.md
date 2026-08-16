@@ -222,6 +222,31 @@ http_headers = { Authorization = "Bearer your-api-key" }
 </details>
 
 <details>
+<summary><img src="https://img.shields.io/badge/-Antigravity-4285F4?style=flat-square&logo=googlegemini&logoColor=white" align="absmiddle"></summary>
+
+This is Google's own agent/IDE, separate from routing through Omnigent --
+if you're running Antigravity directly rather than as an Omnigent harness,
+it has its own global MCP config at `~/.gemini/config/mcp_config.json`
+(or `.agents/mcp_config.json` for a project-local setup):
+
+```json
+{
+  "mcpServers": {
+    "omnigrid": {
+      "serverUrl": "https://chanza.ai/mcp.php",
+      "headers": { "Authorization": "Bearer your-api-key" }
+    }
+  }
+}
+```
+
+Note the field is `serverUrl`, not `url` or `httpUrl` -- Antigravity
+specifically doesn't accept those. You can also edit this through the UI:
+**MCP Servers** dropdown in the agent panel &rarr; **Manage MCP Servers**
+&rarr; **View raw config**, or `/mcp` in Antigravity CLI.
+</details>
+
+<details>
 <summary><img src="https://img.shields.io/badge/-ChatGPT-412991?style=flat-square&logo=openai&logoColor=white" align="absmiddle"></summary>
 
 ChatGPT's connectors (Settings &rarr; Connectors, needs Developer Mode
@@ -262,39 +287,35 @@ text = cc.run_llm_infer("Explain BitTorrent in one sentence.",
 </details>
 
 **4. Ask for the shared resource by name**, in plain language, in whichever
-client you just wired up:
+client you just wired up. One test prompt per tool, to try directly:
 
-> List the models available on Omnigrid, then use whichever one is hosted
-> to write a two-sentence summary of why octopuses are considered
-> intelligent.
+| Tool | Try this prompt |
+|---|---|
+| `list_models` | `List the models available on Omnigrid.` |
+| `offload_llm_generate` (text only) | `List the models available on Omnigrid, then use whichever one is hosted to write a two-sentence summary of why octopuses are considered intelligent.` |
+| `offload_vlm_generate` (text only) | `Use Omnigrid's offload_vlm_generate to have <model-name> explain what 17 times 24 is.` |
+| `offload_vlm_generate` (text + image) | `Use Omnigrid's offload_vlm_generate to have <model-name> explain what's in this image.` |
+| `offload_tensor_op` | `Use the omnigrid tool to compute the matrix product of [[1, 2], [3, 4]] and [[5, 6], [7, 8]].` |
 
-That one calls `list_models` then `offload_llm_generate`. **For an image plus
-text, use `offload_vlm_generate` instead** -- `offload_llm_generate` is
-text-only and has no field for an image at all, so asking for it by name
-on an image prompt just silently drops the picture:
+Swap `<model-name>` for whatever `list_models` actually returns first.
+**Use `offload_vlm_generate`, not `offload_llm_generate`, whenever an image
+is involved** -- `offload_llm_generate` is text-only and has no field for
+an image at all, so asking for it by name on an image prompt just silently
+drops the picture.
 
-> Use Omnigrid's offload_vlm_generate to have `<model-name>` explain what's
-> in this image.
+For the image-plus-text row, whether the image data actually reaches the
+tool call depends on whether your harness bridges attached images into MCP
+tool arguments as base64 -- not every harness does. If the response
+describes the image correctly, it worked; if it hallucinates or the tool
+errors on a missing/empty image field, ask it explicitly to "read the
+image file, base64-encode it, and pass that as image_b64" instead of
+relying on the attachment alone.
 
-Whether the image data actually reaches the tool call depends on whether
-your harness bridges attached images into MCP tool arguments as base64 --
-not every harness does. If the response describes the image correctly,
-it worked; if it hallucinates or the tool errors on a missing/empty
-image field, ask it explicitly to "read the image file, base64-encode it,
-and pass that as image_b64" instead of relying on the attachment alone.
-
-For raw compute instead of text generation -- no model, no GPU required
-from anyone -- the same tool call pattern works for `offload_tensor_op` too:
-
-> Use the omnigrid tool to compute the matrix product of [[1, 2], [3, 4]]
-> and [[5, 6], [7, 8]].
-
-Either way, if the provider is slow to respond, the tool returns a
-`job_id` instead of making the agent (or you) wait indefinitely -- the
-agent calls `check_job_result` with it, as many times as it takes, until
-the answer's ready. The result comes back into your conversation like any
-other tool result -- the compute for it just happened on someone else's
-machine.
+Whichever tool, if the provider is slow to respond it returns a `job_id`
+instead of making the agent (or you) wait indefinitely -- the agent calls
+`check_job_result` with it, as many times as it takes, until the answer's
+ready. The result comes back into your conversation like any other tool
+result -- the compute for it just happened on someone else's machine.
 
 This is *not* a way to share access to your paid Claude/Codex/etc. account
 or its credentials -- Omnigent's own session-sharing deliberately keeps
