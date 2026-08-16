@@ -106,6 +106,28 @@ async def test_generate_uses_keep_alive_to_stay_warm(fake_session):
     assert payload["stream"] is False
 
 
+async def test_generate_attaches_image_to_last_message(fake_session):
+    """Regression: OllamaBackend originally built messages from
+    request.messages only and silently dropped image_b64, so vlm_infer jobs
+    ran the model blind -- confirmed live (moondream/llava both hallucinated
+    a scene with no relation to the actual uploaded photo)."""
+    backend = OllamaBackend("llava:7b")
+    request = GenerateRequest(
+        messages=[Message(role="user", content="Describe this image.")],
+        max_output_tokens=64, image_b64="ZmFrZWltYWdlYnl0ZXM=",
+    )
+    await backend.generate(request)
+    _, payload = fake_session.post_calls[0]
+    assert payload["messages"][-1]["images"] == ["ZmFrZWltYWdlYnl0ZXM="]
+
+
+async def test_generate_without_image_sends_no_images_field(fake_session):
+    backend = OllamaBackend("qwen3:8b")
+    await backend.generate(_request())
+    _, payload = fake_session.post_calls[0]
+    assert "images" not in payload["messages"][-1]
+
+
 async def test_generate_disables_thinking_so_reasoning_models_dont_starve_content(fake_session):
     """qwen3 and other reasoning models otherwise burn max_output_tokens on
     a separate `message.thinking` field and leave `message.content` (what

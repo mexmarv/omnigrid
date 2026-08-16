@@ -102,9 +102,14 @@ class OllamaBackend:
         }
         if request.stop:
             options["stop"] = request.stop
+        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+        if request.image_b64 and messages:
+            # Ollama's own image field -- a list of plain base64 strings (no
+            # data: URI prefix) attached to the message it should describe.
+            messages[-1]["images"] = [request.image_b64]
         payload = {
             "model": self._model,
-            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "messages": messages,
             "stream": False,
             "think": False,
             "keep_alive": self._keep_alive,
