@@ -194,14 +194,16 @@ function friendly_task_type(string $taskType): string {
   <div class="section">
     <h2>Being shared for free, right now</h2>
     <div id="sharing-block">
-      <?php if ($s['providers_online'] === 0): ?>
+      <?php if ($s['providers_online'] === 0 && empty($s['hosted_models'])): ?>
         <div class="card empty">Nobody's online right now -- <a href="register.php" style="color:var(--accent-2)">be the first to share something</a>.</div>
       <?php else: ?>
         <div class="card">
-          <p style="margin:0 0 12px; color:var(--muted); font-size:14px;" id="sharing-summary">
-            <?= $s['total_cores'] ?> CPU cores and <?= number_format($s['total_ram_mb'] / 1024, 1) ?> GB RAM
-            donated across <?= $s['providers_online'] ?> machine<?= $s['providers_online'] === 1 ? '' : 's' ?><?= $s['gpu_providers'] > 0 ? " ({$s['gpu_providers']} with a GPU)" : '' ?>.
-          </p>
+          <?php if ($s['providers_online'] > 0): ?>
+            <p style="margin:0 0 12px; color:var(--muted); font-size:14px;" id="sharing-summary">
+              <?= $s['total_cores'] ?> CPU cores and <?= number_format($s['total_ram_mb'] / 1024, 1) ?> GB RAM
+              donated across <?= $s['providers_online'] ?> machine<?= $s['providers_online'] === 1 ? '' : 's' ?><?= $s['gpu_providers'] > 0 ? " ({$s['gpu_providers']} with a GPU)" : '' ?>.
+            </p>
+          <?php endif; ?>
           <?php if (!empty($s['hosted_models'])): ?>
             <p style="margin:0 0 10px; color:var(--muted); font-size:13px;">LLM models available for text generation:</p>
             <div class="tags" id="hosted-models-tags">
@@ -209,7 +211,7 @@ function friendly_task_type(string $taskType): string {
                 <span class="tag"><?= e($model) ?></span>
               <?php endforeach; ?>
             </div>
-          <?php else: ?>
+          <?php elseif ($s['providers_online'] > 0): ?>
             <p style="margin:0; color:var(--muted); font-size:13px;" id="hosted-models-empty">No one's hosting an LLM for generation right now -- only raw compute (tensor ops, ONNX inference).</p>
           <?php endif; ?>
         </div>
