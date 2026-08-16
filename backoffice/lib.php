@@ -5,6 +5,12 @@ const HEARTBEAT_TIMEOUT_S = 60;
 const STARTING_CREDITS = 50.0;
 const CREDIT_RATE_PER_RESOURCE_SECOND = 1.0;
 
+// Floor for the NVIDIA relay's max_tokens -- reasoning models can burn
+// through a small budget entirely on internal reasoning and never reach a
+// final answer (see call_nvidia_vlm's null-content handling below). Whatever
+// a caller asks for, never hand NVIDIA less room than this to actually finish.
+const NVIDIA_MIN_MAX_TOKENS = 2048;
+
 function json_input(): array {
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
@@ -75,6 +81,7 @@ function nvidia_hosted_models(): array {
  * generated text. Mirrors client/handlers/nvidia_vlm.py's request shape exactly. */
 function call_nvidia_vlm(string $modelId, string $apiKey, string $prompt,
                           ?string $imageB64, string $imageMime, int $maxTokens): string {
+    $maxTokens = max($maxTokens, NVIDIA_MIN_MAX_TOKENS);
     $content = $prompt;
     if ($imageB64 !== null) {
         $content = [
@@ -85,7 +92,7 @@ function call_nvidia_vlm(string $modelId, string $apiKey, string $prompt,
     $ch = curl_init('https://integrate.api.nvidia.com/v1/chat/completions');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 60,
+        CURLOPT_TIMEOUT => 120, // a floored max_tokens can mean a slow reasoning model runs long
         CURLOPT_HTTPHEADER => ["Authorization: Bearer $apiKey", 'Content-Type: application/json'],
         CURLOPT_POSTFIELDS => json_encode([
             'model' => $modelId,

@@ -33,7 +33,11 @@ $pdo = omnigrid_db();
 
 const INITIAL_WAIT_S = 10;
 const POLL_WAIT_S = 10;
-set_time_limit(30);
+// 120s, not 30s: the NVIDIA relay path floors max_tokens (see
+// NVIDIA_MIN_MAX_TOKENS in lib.php) so a reasoning model has room to finish,
+// which can genuinely take past 30s. The queued-job paths still return
+// quickly on their own via INITIAL_WAIT_S regardless of this ceiling.
+set_time_limit(120);
 
 header('Content-Type: application/json');
 
@@ -124,7 +128,7 @@ switch ($method) {
                     'properties' => [
                         'prompt' => ['type' => 'string'],
                         'model_name' => ['type' => 'string'],
-                        'max_tokens' => ['type' => 'integer', 'default' => 256],
+                        'max_tokens' => ['type' => 'integer', 'default' => 2048],
                         'temperature' => ['type' => 'number', 'default' => 0.7],
                         'system' => ['type' => 'string'],
                     ],
@@ -144,7 +148,7 @@ switch ($method) {
                         'model_name' => ['type' => 'string'],
                         'image_b64' => ['type' => 'string', 'description' => 'optional base64-encoded image'],
                         'image_mime' => ['type' => 'string', 'default' => 'image/jpeg'],
-                        'max_tokens' => ['type' => 'integer', 'default' => 512],
+                        'max_tokens' => ['type' => 'integer', 'default' => 2048],
                     ],
                     'required' => ['prompt', 'model_name'],
                 ],
@@ -207,7 +211,7 @@ switch ($method) {
                 try {
                     $text = call_nvidia_vlm(
                         $nvidiaModels[$modelName]['model_id'], $nvidiaModels[$modelName]['api_key'],
-                        $args['prompt'] ?? '', null, 'image/jpeg', (int)($args['max_tokens'] ?? 256)
+                        $args['prompt'] ?? '', null, 'image/jpeg', (int)($args['max_tokens'] ?? 2048)
                     );
                     tool_text_result($id, $text, ['status' => 'done', 'text' => $text]);
                 } catch (Throwable $ex) {
@@ -216,7 +220,7 @@ switch ($method) {
             } else {
                 $payload = [
                     'prompt' => $args['prompt'] ?? '',
-                    'max_tokens' => (int)($args['max_tokens'] ?? 256),
+                    'max_tokens' => (int)($args['max_tokens'] ?? 2048),
                     'temperature' => (float)($args['temperature'] ?? 0.7),
                 ];
                 if (!empty($args['system'])) {
@@ -245,7 +249,7 @@ switch ($method) {
                     $text = call_nvidia_vlm(
                         $nvidiaModels[$modelName]['model_id'], $nvidiaModels[$modelName]['api_key'],
                         $args['prompt'] ?? '', $args['image_b64'] ?? null,
-                        $args['image_mime'] ?? 'image/jpeg', (int)($args['max_tokens'] ?? 512)
+                        $args['image_mime'] ?? 'image/jpeg', (int)($args['max_tokens'] ?? 2048)
                     );
                     tool_text_result($id, $text, ['status' => 'done', 'text' => $text]);
                 } catch (Throwable $ex) {
@@ -258,7 +262,7 @@ switch ($method) {
             } else {
                 $payload = [
                     'prompt' => $args['prompt'] ?? '',
-                    'max_tokens' => (int)($args['max_tokens'] ?? 512),
+                    'max_tokens' => (int)($args['max_tokens'] ?? 2048),
                 ];
                 if (!empty($args['image_b64'])) {
                     $payload['image_b64'] = $args['image_b64'];
