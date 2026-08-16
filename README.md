@@ -154,6 +154,20 @@ tools:
       OMNIGRID_API_KEY: "your-api-key"
       OMNIGRID_HUB: "https://chanza.ai"
 ```
+
+**Once the session is live** (the REPL prompt shows up after
+`omnigent run path/to/your-agent.yaml`), there's no special tool-invocation
+syntax -- just describe what you want in plain language and the harness
+decides on its own whether to call the tool:
+
+```
+List the models available on Omnigrid, then use whichever text model is
+hosted to write a two-sentence summary of why octopuses are considered
+intelligent.
+```
+
+Swap in a specific model name once you know what's actually hosted right
+now (ask it to call `list_models` first, or check the dashboard).
 </details>
 
 <details>
