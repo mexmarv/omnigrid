@@ -190,6 +190,35 @@ just connects.)
 Note: Anthropic's own docs describe custom request-header auth as a beta
 feature being rolled out gradually -- if you don't see that option yet,
 it may not be enabled for your account.
+
+**Don't see the custom-header option, or no "Add custom connector" at
+all?** Bypass the UI entirely by editing the config file directly, using
+the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge (a
+small local proxy that lets Claude Desktop's traditional command-based
+config carry a custom header to a remote server). Requires Node.js (for
+`npx`) -- `brew install node` first if you don't have it.
+
+Edit (or create) `~/Library/Application Support/Claude/claude_desktop_config.json`
+(merge into the existing `mcpServers` object if the file already has
+other servers in it):
+
+```json
+{
+  "mcpServers": {
+    "omnigrid": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "https://chanza.ai/mcp.php",
+        "--header",
+        "Authorization: Bearer your-api-key"
+      ]
+    }
+  }
+}
+```
+
+Fully quit and reopen Claude Desktop for it to pick up the change.
 </details>
 
 <details>
