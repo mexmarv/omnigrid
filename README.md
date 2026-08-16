@@ -392,22 +392,34 @@ python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ra
 ```
 
 No GGUF file and no GPU, but you do have a free [build.nvidia.com](https://build.nvidia.com)
-API key? Share that instead -- no local model or GPU required, since the
-actual inference runs on NVIDIA's own infrastructure:
+API key? Share that instead -- no local model or GPU required at all,
+since the actual inference runs on NVIDIA's own infrastructure. This is
+the one resource here that's *just* a credential relaying an HTTP call,
+not real local compute -- which means it doesn't need a client process
+running on a machine you leave on:
 
-```bash
-python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 1 --ram-mb 512 \
-    --coordinator https://chanza.ai \
-    --nvidia-api-key "nvapi-your-own-key" --nvidia-model-name my-vision-model
-```
+- **Run your own backoffice (e.g. self-hosting per below)?** Add an
+  `nvidia_models` entry to `config.php` (see `config.example.php`) and
+  you're done -- the backoffice itself relays to NVIDIA directly, the key
+  never leaves that server, and it shows up in `list_models` with zero
+  separate processes running.
+- **Using someone else's backoffice (e.g. chanza.ai) instead?** Run the
+  client, same as any other resource -- this one just happens not to need
+  real CPU/RAM behind it:
 
-Defaults to `meta/llama-3.2-90b-vision-instruct` -- a free, general vision-
-language model capable of image recognition (object/scene identification,
-describing what's happening in a photo, including sports and activities)
-via `--nvidia-model-id` if you'd rather point at a different model from
-NVIDIA's [catalog](https://build.nvidia.com/models). Your key stays on
-your machine the whole time -- the network only ever relays the prompt
-and (optionally) an image to it, never the key itself. NVIDIA's free tier
+  ```bash
+  python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 1 --ram-mb 512 \
+      --coordinator https://chanza.ai \
+      --nvidia-api-key "nvapi-your-own-key" --nvidia-model-name my-vision-model
+  ```
+
+Either way, defaults to `meta/llama-3.2-90b-vision-instruct` -- a free,
+general vision-language model capable of image recognition (object/scene
+identification, describing what's happening in a photo, including sports
+and activities) -- override with `--nvidia-model-id` (client) or
+`model_id` (config.php) to point at a different one from NVIDIA's
+[catalog](https://build.nvidia.com/models). The key never crosses the
+network to whoever's consuming the model, either way. NVIDIA's free tier
 is rate-limited (historically around 40 requests/minute); expect
 `check_job_result` polling to take a little longer under heavy use rather
 than a hard failure.

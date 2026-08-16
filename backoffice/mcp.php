@@ -216,24 +216,42 @@ switch ($method) {
                 tool_error($id, $job['error'] ?? 'Job failed.');
             }
         } elseif ($name === 'offload_vlm_generate') {
-            $payload = [
-                'prompt' => $args['prompt'] ?? '',
-                'max_tokens' => (int)($args['max_tokens'] ?? 512),
-            ];
-            if (!empty($args['image_b64'])) {
-                $payload['image_b64'] = $args['image_b64'];
-                $payload['image_mime'] = $args['image_mime'] ?? 'image/jpeg';
-            }
-            $payloadB64 = base64_encode(json_encode($payload));
             $modelName = $args['model_name'] ?? '';
-            $job = submit_job_and_wait($pdo, (int)$account['id'], "vlm_infer:$modelName", $payloadB64,
-                                        1.0, 512, 60, INITIAL_WAIT_S);
-            if ($job['status'] === 'done') {
-                tool_result_from_job($id, $job);
-            } elseif ($job['status'] === 'timeout') {
-                tool_pending_result($id, $job['job_id']);
+            $nvidiaModels = nvidia_hosted_models();
+
+            if (isset($nvidiaModels[$modelName])) {
+                // Backoffice-hosted: this server relays to NVIDIA directly with its own
+                // configured key, right here, synchronously -- no separate provider process
+                // needed since there's no local compute to run, just an outbound API call.
+                try {
+                    $text = call_nvidia_vlm(
+                        $nvidiaModels[$modelName]['model_id'], $nvidiaModels[$modelName]['api_key'],
+                        $args['prompt'] ?? '', $args['image_b64'] ?? null,
+                        $args['image_mime'] ?? 'image/jpeg', (int)($args['max_tokens'] ?? 512)
+                    );
+                    tool_text_result($id, $text, ['status' => 'done', 'text' => $text]);
+                } catch (RuntimeException $ex) {
+                    tool_error($id, $ex->getMessage());
+                }
             } else {
-                tool_error($id, $job['error'] ?? 'Job failed.');
+                $payload = [
+                    'prompt' => $args['prompt'] ?? '',
+                    'max_tokens' => (int)($args['max_tokens'] ?? 512),
+                ];
+                if (!empty($args['image_b64'])) {
+                    $payload['image_b64'] = $args['image_b64'];
+                    $payload['image_mime'] = $args['image_mime'] ?? 'image/jpeg';
+                }
+                $payloadB64 = base64_encode(json_encode($payload));
+                $job = submit_job_and_wait($pdo, (int)$account['id'], "vlm_infer:$modelName", $payloadB64,
+                                            1.0, 512, 60, INITIAL_WAIT_S);
+                if ($job['status'] === 'done') {
+                    tool_result_from_job($id, $job);
+                } elseif ($job['status'] === 'timeout') {
+                    tool_pending_result($id, $job['job_id']);
+                } else {
+                    tool_error($id, $job['error'] ?? 'Job failed.');
+                }
             }
         } elseif ($name === 'offload_tensor_op') {
             $payload = ['op' => $args['op'] ?? '', 'a_npy_b64' => base64_encode(npy_encode($args['a'] ?? []))];
