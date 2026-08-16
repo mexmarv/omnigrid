@@ -65,7 +65,7 @@ $hub = hub_base_url();
     padding: 24px; margin-bottom: 20px;
   }
   label { display: block; font-size: 13.5px; color: var(--muted); margin-bottom: 8px; }
-  input[type=text] {
+  input[type=text], input[type=email] {
     width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
     background: var(--panel-2); color: var(--text); font-size: 15px; margin-bottom: 16px;
   }
@@ -78,18 +78,21 @@ $hub = hub_base_url();
     background: rgba(255,128,128,0.08); border: 1px solid rgba(255,128,128,0.3);
     border-radius: 10px; padding: 14px 16px; font-size: 13.5px; color: #ffb3b3; margin-bottom: 20px;
   }
-  .key {
-    font-family: ui-monospace, SFMono-Regular, monospace; background: var(--panel-2);
-    border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 13.5px;
-    word-break: break-all; margin-bottom: 8px;
+  .copyable {
+    position: relative; font-family: ui-monospace, SFMono-Regular, monospace;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; font-size: 13.5px; word-break: break-all; margin-bottom: 8px;
   }
   h2 { font-size: 15px; color: var(--muted); font-weight: 600; text-transform: uppercase;
        letter-spacing: 0.06em; margin: 28px 0 12px; }
-  pre {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px; overflow-x: auto; font-size: 13px; line-height: 1.6;
-  }
+  pre.copyable { white-space: pre-wrap; word-break: normal; overflow-x: auto; line-height: 1.6; }
   code { font-family: ui-monospace, SFMono-Regular, monospace; }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px; padding: 5px 10px; font-size: 11.5px;
+    font-weight: 600; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--muted); cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent-2); }
 </style>
 </head>
 <body>
@@ -121,9 +124,9 @@ $hub = hub_base_url();
         it authenticates every request you make as <strong><?= e($result['name']) ?></strong>.
       </div>
       <label>Account name</label>
-      <div class="key"><?= e($result['name']) ?></div>
+      <div class="copyable"><?= e($result['name']) ?></div>
       <label>API key</label>
-      <div class="key"><?= e($result['api_key']) ?></div>
+      <div class="copyable"><?= e($result['api_key']) ?></div>
     </div>
 
     <h2>Configure Omnigent</h2>
@@ -132,21 +135,19 @@ $hub = hub_base_url();
       Paste this into its "Describe a task to start a new session..." box
       and it writes the agent config for you:
     </p>
-    <pre id="omnigent-prompt"><code>Set up a new agent with an MCP tool called "omnigrid" over HTTP, pointing
+    <pre class="copyable"><code>Set up a new agent with an MCP tool called "omnigrid" over HTTP, pointing
 at <?= e($hub) ?>/mcp.php, with an Authorization header set to
 "Bearer <?= e($result['api_key']) ?>". It should be able to call
 list_models, offload_llm_generate, and offload_tensor_op through that tool.</code></pre>
-    <button type="button" onclick="copyBlock('omnigent-prompt', this)"
-            style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); font-size:13px; padding:8px 14px; margin-bottom:16px;">
-      Copy prompt
-    </button>
 
-    <p class="sub" style="margin:0 0 12px; font-size:13.5px;">
-      Then, once it's wired up, just ask for it in plain language:
+    <p class="sub" style="margin:16px 0 6px; font-size:13.5px;">
+      Then, once it's wired up, just ask for it in plain language -- for example:
     </p>
-    <pre><code>List the models available on Omnigrid, then use whichever one is
+    <pre class="copyable"><code>List the models available on Omnigrid, then use whichever one is
 hosted to write a two-sentence summary of why octopuses are
 considered intelligent.</code></pre>
+    <pre class="copyable"><code>Use the omnigrid tool to compute the matrix product of
+[[1, 2], [3, 4]] and [[5, 6], [7, 8]].</code></pre>
 
     <p class="sub" style="margin:20px 0 6px; font-size:13px;">
       Prefer hand-editing an agent file yourself, or using a client with an
@@ -154,7 +155,7 @@ considered intelligent.</code></pre>
       <a href="https://github.com/mexmarv/omnigrid#wire-it-up" style="color:var(--accent-2)">full walkthrough</a>
       for each)? Here's the equivalent YAML:
     </p>
-    <pre><code>tools:
+    <pre class="copyable"><code>tools:
   omnigrid:
     type: mcp
     url: "<?= e($hub) ?>/mcp.php"
@@ -163,9 +164,9 @@ considered intelligent.</code></pre>
 
     <p class="sub" style="margin:16px 0 6px; font-size:13px;">
       Prefer running your own local MCP process instead of the hosted one (e.g. for a
-      private setup)? Same three tools, no server round-trip:
+      private setup)? Same tools, no server round-trip:
     </p>
-    <pre><code>tools:
+    <pre class="copyable"><code>tools:
   omnigrid:
     type: mcp
     command: python3
@@ -175,25 +176,36 @@ considered intelligent.</code></pre>
       OMNIGRID_HUB: "<?= e($hub) ?>"</code></pre>
 
     <h2>Or share compute from the command line</h2>
-    <pre><code>python3 agent.py --api-key "<?= e($result['api_key']) ?>" --cpu-cores 2 --ram-mb 2048 \
+    <pre class="copyable"><code>python3 agent.py --api-key "<?= e($result['api_key']) ?>" --cpu-cores 2 --ram-mb 2048 \
     --coordinator <?= e($hub) ?></code></pre>
 
     <h2>Or call it directly from Python</h2>
-    <pre><code>import client_sdk as cc
+    <pre class="copyable"><code>import client_sdk as cc
 
 text = cc.run_llm_infer("hello!", model_name="&lt;see dashboard for hosted models&gt;",
-                         api_key="<?= e($result['api_key']) ?>", coordinator="<?= e($hub) ?>")</code></pre>
+                         api_key="<?= e($result['api_key']) ?>", coordinator="<?= e($hub) ?>")
+
+result = cc.run_tensor_op("matmul", [[1, 2], [3, 4]], [[5, 6], [7, 8]],
+                           api_key="<?= e($result['api_key']) ?>", coordinator="<?= e($hub) ?>")</code></pre>
   <?php endif; ?>
 </div>
 <script>
-function copyBlock(id, btn) {
-  const text = document.getElementById(id).innerText;
-  navigator.clipboard.writeText(text).then(function () {
-    const original = btn.textContent;
-    btn.textContent = 'Copied!';
-    setTimeout(function () { btn.textContent = original; }, 1500);
+// Every .copyable block gets a copy button automatically -- add a new one
+// anywhere in this page and it just works, nothing to wire up by hand.
+document.querySelectorAll('.copyable').forEach(function (el) {
+  const originalText = el.innerText; // captured before the button becomes part of it
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'copy-btn';
+  btn.textContent = 'Copy';
+  btn.addEventListener('click', function () {
+    navigator.clipboard.writeText(originalText).then(function () {
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+    });
   });
-}
+  el.appendChild(btn);
+});
 </script>
 </body>
 </html>

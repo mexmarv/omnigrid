@@ -90,11 +90,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     background: rgba(255,128,128,0.08); border: 1px solid rgba(255,128,128,0.3);
     border-radius: 10px; padding: 14px 16px; font-size: 13.5px; color: #ffb3b3; margin-bottom: 20px;
   }
-  .key {
-    font-family: ui-monospace, SFMono-Regular, monospace; background: var(--panel-2);
-    border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 13.5px;
-    word-break: break-all;
+  .copyable {
+    position: relative; font-family: ui-monospace, SFMono-Regular, monospace;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; font-size: 13.5px; word-break: break-all;
   }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px; padding: 5px 10px; font-size: 11.5px;
+    font-weight: 600; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--muted); cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent-2); }
 </style>
 </head>
 <body>
@@ -107,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="card">
       <div class="warn">Shown <strong>once</strong> -- copy it now.</div>
       <label>API key</label>
-      <div class="key"><?= e($newApiKey) ?></div>
+      <div class="copyable"><?= e($newApiKey) ?></div>
     </div>
 
   <?php elseif ($deleted): ?>
@@ -154,5 +160,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   <?php endif; ?>
 </div>
+<script>
+document.querySelectorAll('.copyable').forEach(function (el) {
+  const originalText = el.innerText;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'copy-btn';
+  btn.textContent = 'Copy';
+  btn.addEventListener('click', function () {
+    navigator.clipboard.writeText(originalText).then(function () {
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+    });
+  });
+  el.appendChild(btn);
+});
+</script>
 </body>
 </html>

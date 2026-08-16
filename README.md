@@ -133,8 +133,10 @@ caches an API key at `~/.omnigrid/` -- no password, ever. Your email is
 only used by [reset.php](https://chanza.ai/reset.php) if you ever need to
 reissue a lost key or delete the account; back up `~/.omnigrid/` if you'd
 rather not rely on that. Every job you complete earns credits from
-whoever consumed it; nobody has to trust anybody, the ledger just tracks
-who's given what.
+whoever consumed it -- **bragging rights only, not a spendable balance.**
+Nothing anywhere checks your credit total before letting you submit a job;
+it's a leaderboard, not a currency, and nobody has to trust anybody
+either way -- the ledger just tracks who's given what.
 
 <details>
 <summary>What actually happens when a job runs (sequence diagram)</summary>
@@ -242,11 +244,17 @@ at https://chanza.ai/mcp.php, with an Authorization header set to
 offload_llm_generate, and offload_tensor_op through that tool.
 ```
 
-Then, once it's wired up, just ask for the shared resource in plain language:
+Then, once it's wired up, just ask for the shared resource in plain language --
+for generated text:
 
 > List the models available on Omnigrid, then use whichever one is hosted
 > to write a two-sentence summary of why octopuses are considered
 > intelligent.
+
+or for raw compute, no LLM involved:
+
+> Use the omnigrid tool to compute the matrix product of [[1, 2], [3, 4]]
+> and [[5, 6], [7, 8]].
 
 Prefer hand-editing the agent file yourself (or Omnigent handed you one
 you want to inspect/tweak)? Here's the equivalent YAML `tools:` block:
@@ -359,20 +367,26 @@ supported path.
 </details>
 
 **4. Ask for the shared resource by name**, in plain language, in whichever
-client you just wired up -- for example:
+client you just wired up -- these map to the tools in
+[What you actually get to call](#what-you-actually-get-to-call) above:
 
 > List the models available on Omnigrid, then use whichever one is hosted
 > to write a two-sentence summary of why octopuses are considered
 > intelligent.
 
-The agent calls `list_models` to see what's hosted, then
-`offload_llm_generate` to actually run the prompt on the community-shared
-GPU/CPU behind it. If the provider is slow to respond, the tool returns a
+That one calls `list_models` then `offload_llm_generate`. For raw compute
+instead of text generation -- no model, no GPU required from anyone -- the
+same tool call pattern works for `offload_tensor_op` too:
+
+> Use the omnigrid tool to compute the matrix product of [[1, 2], [3, 4]]
+> and [[5, 6], [7, 8]].
+
+Either way, if the provider is slow to respond, the tool returns a
 `job_id` instead of making the agent (or you) wait indefinitely -- the
 agent calls `check_job_result` with it, as many times as it takes, until
-the answer's ready. Either way, text comes back into your conversation
-like any other tool result -- the compute for it just happened on someone
-else's machine.
+the answer's ready. The result comes back into your conversation like any
+other tool result -- the compute for it just happened on someone else's
+machine.
 
 This is *not* a way to share access to your paid Claude/Codex/etc. account
 or its credentials -- Omnigent's own session-sharing deliberately keeps
