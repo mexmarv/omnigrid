@@ -20,6 +20,13 @@ GenerateRequest and returns one GenerateResponse so a future
 generate_stream() (yielding incremental chunks from Ollama's `stream:
 true` mode) can be added alongside it without touching this signature or
 any existing caller.
+
+`think: false` is always sent: reasoning models (e.g. qwen3) otherwise
+return their chain-of-thought in a separate `message.thinking` field and
+leave `message.content` -- what this backend reads -- empty until
+max_output_tokens covers the reasoning too, which silently starves small
+generation budgets. Ollama ignores `think` for models that don't support
+it, so this is safe as a universal default.
 """
 
 import asyncio
@@ -99,6 +106,7 @@ class OllamaBackend:
             "model": self._model,
             "messages": [{"role": m.role, "content": m.content} for m in request.messages],
             "stream": False,
+            "think": False,
             "keep_alive": self._keep_alive,
             "options": options,
         }

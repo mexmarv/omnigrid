@@ -106,6 +106,16 @@ async def test_generate_uses_keep_alive_to_stay_warm(fake_session):
     assert payload["stream"] is False
 
 
+async def test_generate_disables_thinking_so_reasoning_models_dont_starve_content(fake_session):
+    """qwen3 and other reasoning models otherwise burn max_output_tokens on
+    a separate `message.thinking` field and leave `message.content` (what
+    we read) empty."""
+    backend = OllamaBackend("qwen3:8b")
+    await backend.generate(_request())
+    _, payload = fake_session.post_calls[0]
+    assert payload["think"] is False
+
+
 async def test_generate_raises_on_connection_error(fake_session):
     fake_session.post_side_effect = requests.ConnectionError("refused")
     backend = OllamaBackend("qwen3:8b")
