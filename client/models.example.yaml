@@ -1,0 +1,72 @@
+# Copy to models.yaml (gitignored) and point --models-config / OMNIGRID_MODELS_CONFIG
+# at it. Every field here is set by the PROVIDER operator -- a requester's job
+# payload can only ever influence generation parameters (see
+# client/inference/schema.py), never which backend/endpoint/model answers it.
+#
+# Each entry becomes one persistent backend, started once and kept warm for
+# the life of the agent process -- not reloaded per job. backend: "ollama"
+# connects to a local Ollama server you already run; backend: "llamacpp"
+# supervises a persistent `llama-server` process for a GGUF file you host.
+
+models:
+  # --- Apple Silicon, via Ollama (recommended on macOS) ---------------------
+  - public_name: qwen3-8b-m4
+    backend: ollama
+    endpoint: http://127.0.0.1:11434
+    local_model: qwen3:8b
+    max_context_tokens: 16384
+    max_output_tokens: 4096
+    max_concurrency: 1
+
+  # --- Persistent llama.cpp (any platform), GGUF you already downloaded -----
+  # Requires the `llama-server` binary on PATH (e.g. `brew install llama.cpp`,
+  # or build llama.cpp from source). n_gpu_layers: -1 offloads every layer;
+  # set 0 for CPU-only, or a smaller positive number to offload partially.
+  # - public_name: smollm2-135m
+  #   backend: llamacpp
+  #   model_path: /path/to/SmolLM2-135M-Instruct-Q4_K_M.gguf
+  #   n_gpu_layers: -1
+  #   max_context_tokens: 4096
+  #   max_output_tokens: 2048
+  #   max_concurrency: 1
+
+  # --- Nvidia Linux, via llama.cpp built with CUDA ---------------------------
+  # - public_name: qwen3-8b-cuda
+  #   backend: llamacpp
+  #   model_path: /srv/models/Qwen3-8B-Q4_K_M.gguf
+  #   n_gpu_layers: -1        # llama.cpp offloads to CUDA the same way as Metal
+  #   max_context_tokens: 16384
+  #   max_output_tokens: 4096
+  #   max_concurrency: 1
+
+  # --- CPU-only fallback (any platform, no GPU offload) ----------------------
+  # - public_name: smollm2-135m-cpu
+  #   backend: llamacpp
+  #   model_path: /path/to/SmolLM2-135M-Instruct-Q4_K_M.gguf
+  #   n_gpu_layers: 0
+  #   max_context_tokens: 2048
+  #   max_output_tokens: 1024
+  #   max_concurrency: 1
+
+  # --- A vision-language GGUF model, served locally --------------------------
+  # - public_name: smolvlm-256m
+  #   backend: llamacpp
+  #   model_path: /path/to/SmolVLM-256M-Instruct-Q8_0.gguf
+  #   mmproj_path: /path/to/mmproj-SmolVLM-256M-Instruct-Q8_0.gguf
+  #   vision: true
+  #   n_gpu_layers: -1
+  #   max_context_tokens: 2048
+  #   max_output_tokens: 1024
+  #   max_concurrency: 1
+
+  # --- A remote/shared Ollama instance secured with a bearer token -----------
+  # The token itself lives in an environment variable, never in this file or
+  # on the command line -- set OMNIGRID_OLLAMA_API_KEY before starting agent.py.
+  # - public_name: qwen3-8b-remote
+  #   backend: ollama
+  #   endpoint: https://ollama.internal.example:443
+  #   local_model: qwen3:8b
+  #   api_key_env: OMNIGRID_OLLAMA_API_KEY
+  #   max_context_tokens: 16384
+  #   max_output_tokens: 4096
+  #   max_concurrency: 2

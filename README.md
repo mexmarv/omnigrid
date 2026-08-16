@@ -431,8 +431,8 @@ Three resources, all optional, all combinable on one machine:
 |---|---|---|
 | **CPU + RAM** | `tensor_op` (matmul/add/multiply/relu/sum/mean), `onnx_infer` (any supplied ONNX model) | Baseline -- every provider offers this, no GPU required. |
 | **GPU** | `onnx_infer` and `llm_infer` | Detected automatically and used without extra config -- see below. Not yet wired up for `tensor_op` (still plain CPU numpy there; honest gap, not a hidden one). |
-| **An LLM you already have** (any GGUF file -- Llama, Mistral, Qwen, whatever) | `llm_infer` | You host one specific model under a name of your choosing; only prompts and generation params ever cross the wire, never the model itself. |
-| **A vision-language model you already have** (any GGUF file with a matching mmproj vision projector -- SmolVLM, LLaVA, Qwen2-VL, whatever `llama.cpp`'s multimodal support handles) | `vlm_infer` | Same pattern as `llm_infer`: you host one specific model + its projector file, offloaded to GPU automatically; only the prompt (and optionally an image) crosses the wire. |
+| **An LLM you already have** (an Ollama model, or any GGUF file -- Llama, Mistral, Qwen, whatever) | `llm_infer` | You host one specific model under a name of your choosing, kept warm in a persistent worker across every job (see [Persistent inference backends](#persistent-inference-backends)); only prompts and generation params ever cross the wire, never the model itself. |
+| **A vision-language model you already have** (any GGUF file with a matching mmproj vision projector -- SmolVLM, LLaVA, Qwen2-VL, whatever `llama.cpp`'s multimodal support handles) | `vlm_infer` | Same pattern as `llm_infer`: you host one specific model + its projector file, kept warm and offloaded to GPU automatically; only the prompt (and optionally an image) crosses the wire. |
 
 **How the GPU actually gets used**, concretely:
 - `onnx_infer` tries execution providers in order -- **CoreML** (Apple Silicon), then **CUDA** (NVIDIA), then falls back to plain CPU if neither is compiled into the installed `onnxruntime`. This applies automatically to any ONNX job your machine picks up, no flag needed.
@@ -515,18 +515,81 @@ python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ra
 Already have an API key from [chanza.ai/register.php](https://chanza.ai/register.php)?
 Skip `--name`/`--email` and pass `--api-key` directly instead.
 
-Have an open-weight GGUF model sitting around? Host it for text
-generation, GPU offload included automatically:
+### Persistent inference backends
+
+`llm_infer`/`vlm_infer` are served by a **persistent worker that stays
+loaded across every job** -- not reloaded from disk per request. Two
+backends, pick whichever fits your setup (details, security boundaries,
+and more config examples in
+[docs/inference-architecture.md](docs/inference-architecture.md)):
+
+#### Recommended: Ollama
+
+[Ollama](https://ollama.com) is the easiest way to host a model for
+Omnigrid -- it handles GPU acceleration (Metal, CUDA, ROCm) and model
+downloads/quantization for you, so there's no `--gpu-layers` to tune and
+no GGUF file to track down by hand. Three steps, on any platform:
+
+```bash
+# 1. Install Ollama (macOS/Linux: script below; Windows: download from ollama.com)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Pull a model -- browse more at https://ollama.com/library
+ollama pull qwen3:8b
+
+# 3. Ollama is now serving it at http://127.0.0.1:11434 -- verify with:
+curl http://127.0.0.1:11434/api/tags
+```
+
+Then point a `models.yaml` at it (copy
+[client/models.example.yaml](client/models.example.yaml)):
+
+```yaml
+models:
+  - public_name: qwen3-8b-m4
+    backend: ollama
+    endpoint: http://127.0.0.1:11434
+    local_model: qwen3:8b   # must match the tag from `ollama pull`/`ollama list`
+    max_context_tokens: 16384
+    max_output_tokens: 4096
+    max_concurrency: 1
+```
+
+```bash
+OMNIGRID_API_KEY="your-api-key" python3 agent.py --api-key "$OMNIGRID_API_KEY" \
+    --coordinator https://chanza.ai --cpu-cores 2 --ram-mb 2048 \
+    --models-config models.yaml
+```
+
+Omnigrid's agent doesn't manage the Ollama process itself -- it connects
+to whatever's already listening on `endpoint` (`http://127.0.0.1:11434`
+by default) and sends `keep_alive` on every request so Ollama keeps the
+model resident in memory between jobs instead of unloading it after its
+own idle timeout. `local_model` must be a tag Ollama already has (check
+with `ollama list`); the agent's startup health check fails clearly, and
+excludes just that model from what gets announced, if the tag isn't
+pulled yet or the endpoint isn't reachable -- it won't silently claim
+capacity it can't actually serve. Multiple models, or a mix of Ollama and
+llama.cpp entries, can all live in the same `models.yaml`; each gets its
+own persistent worker and its own `max_concurrency`. `api_key_env` (see
+[docs/inference-architecture.md](docs/inference-architecture.md)) covers
+a remote/shared Ollama instance sitting behind auth -- the default local
+setup above needs no key at all.
+
+#### Alternative: a GGUF file via persistent llama.cpp
+
+Have a GGUF file instead of an Ollama tag? The pre-existing
+`--llm-model-path`/`--vlm-model-path` flags keep working unchanged --
+they now supervise a persistent `llama-server` process (llama.cpp's own
+long-lived HTTP worker) instead of reloading the model into a fresh
+subprocess every job. Requires the `llama-server` binary on `PATH`
+(`brew install llama.cpp`, or build llama.cpp from source):
 
 ```bash
 python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ram-mb 2048 \
     --coordinator https://chanza.ai \
     --llm-model-path /path/to/model.gguf --llm-model-name my-model
 ```
-
-Have a GGUF vision-language model (plus its mmproj vision projector file)
-sitting around? Host it for image recognition, same GPU offload as
-`llm_infer`:
 
 ```bash
 python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 1 --ram-mb 512 \
@@ -538,6 +601,10 @@ python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 1 --ra
 Small models built for edge/laptop use work well here -- e.g.
 [SmolVLM-256M-Instruct](https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF)
 runs comfortably on a laptop CPU/Metal and answers in under a second.
+`--models-config` and the legacy `--llm-model-path`/`--vlm-model-path`
+flags can be combined in one agent -- every configured model gets its own
+persistent worker, GPU offload (Metal/CUDA/CPU) chosen the same way as
+before.
 
 The first run registers you an account (50 free credits to start) and
 caches an API key at `~/.omnigrid/` -- no password, ever. Your email is
@@ -563,7 +630,7 @@ sequenceDiagram
     Backoffice-->>Consumer: job_id (queued)
     Provider->>Backoffice: poll for next job
     Backoffice-->>Provider: matching job (data payload)
-    Provider->>Provider: run fixed handler in sandboxed subprocess
+    Provider->>Provider: tensor_op/onnx_infer -> sandboxed subprocess;<br/>llm_infer/vlm_infer -> persistent warm backend
     Provider->>Backoffice: report result
     Backoffice->>Backoffice: credit provider, debit consumer
     Consumer->>Backoffice: poll job status
@@ -603,9 +670,12 @@ plus wiring a client against it) in [backoffice/HOSTING.md](backoffice/HOSTING.m
 - **No transport encryption is enforced by the code itself** -- put this
   behind HTTPS (Hostinger's free AutoSSL, or any reverse proxy) before
   running it for real. chanza.ai already does.
-- **The LLM handler reloads the model from disk on every job** (each job
-  runs in a fresh sandboxed subprocess). Fine for small models; a
-  persistent warm worker per model would be the real fix.
+- **`llm_infer`/`vlm_infer` now run against a persistent worker** (Ollama,
+  or a supervised `llama-server` process) instead of reloading the model
+  per job. What's still ahead of that -- lease-based retries, a real
+  scheduler, trustworthy metering, and more -- is tracked in
+  [Roadmap -- what's left](#roadmap----whats-left) below, not silently
+  skipped.
 - **`tensor_op` doesn't use the GPU yet** -- plain numpy on CPU, even on a
   provider with a GPU sitting idle. `onnx_infer` and `llm_infer` both do;
   extending `tensor_op` (e.g. via PyTorch on CUDA/MPS) is a natural next
@@ -618,16 +688,54 @@ plus wiring a client against it) in [backoffice/HOSTING.md](backoffice/HOSTING.m
   hasn't been audited. Treat this as a working, tested prototype -- not
   a hardened public service, yet.
 
+## Roadmap -- what's left
+
+Persistent inference backends (Ollama + `llama-server`, replacing the old
+per-job model reload) and strict request validation are done -- see
+[Persistent inference backends](#persistent-inference-backends) above and
+[docs/inference-architecture.md](docs/inference-architecture.md) for the
+full design. Five phases are still ahead, each requiring schema/scheduler
+changes to the shared PHP coordinator (`backoffice/`) -- deliberately not
+started partially against a backend that currently works correctly.
+Concrete migration paths for all five are already written up in
+[docs/inference-architecture.md](docs/inference-architecture.md#deferred-phases-3-7-roadmap-not-implemented):
+
+| Phase | What it adds | Status |
+|---|---|---|
+| 1 -- Persistent inference backends | Ollama + supervised `llama-server`, no more per-job model reload | **Done** |
+| 2 -- Separate LLM/VLM execution | Strict message-schema validation, off the sandboxed subprocess | **Done** |
+| 3 -- Structured provider capabilities | Real `providers`/`provider_models`/`provider_capabilities` tables instead of a comma-separated `task_types` column | Not started |
+| 4 -- Reliable job lifecycle | Lease tokens, expiry-based retry, cancellation, idempotent completion | Not started |
+| 5 -- Scheduler improvements | Indexed DB queries + a documented, unit-tested ranking score instead of filtering every queued job in PHP | Not started |
+| 6 -- Metering and model identity | Coordinator-observed wall time/tokens as the accounting source of truth, not provider-self-reported `compute_seconds`; a verified model manifest | Not started |
+| 7 -- Observability and hardening | Structured metrics, API-key rotation, per-account/IP rate limits, SSRF protection | Not started |
+
+Nothing above is half-wired-up or hidden behind an undocumented flag --
+Phases 3-7 simply haven't been started yet. Contributions welcome; open
+an issue before a large PR on any of these so the coordinator-side schema
+changes can be agreed on first.
+
 ## How it's actually built
 
-Providers run a small, fixed set of audited handlers (`client/handlers/`):
-`tensor_op` (six safe numpy operations), `onnx_infer` (a supplied ONNX
-model, data-only, CoreML/CUDA-accelerated when available), `llm_infer`
-(text generation against a model the *provider* chose to host, GPU-offloaded
-when available -- the model itself never crosses the wire, only prompts
-and generation params do). Every job still runs in its own OS subprocess
-with a wall-clock timeout and memory cap, purely to contain crashes -- not
-as a security boundary, since there's nothing untrusted to contain.
+Providers run two kinds of fixed, audited work, on two separate execution
+paths (see [docs/inference-architecture.md](docs/inference-architecture.md)
+for the full design):
+
+- `tensor_op` (six safe numpy operations) and `onnx_infer` (a supplied
+  ONNX model, data-only, CoreML/CUDA-accelerated when available) are
+  short-lived and still run in their own OS subprocess with a wall-clock
+  timeout and memory cap (`client/sandbox.py`) -- purely to contain
+  crashes, not as a security boundary, since there's nothing untrusted to
+  contain.
+- `llm_infer`/`vlm_infer` (text/vision generation against a model the
+  *provider* chose to host) are routed straight to a persistent
+  `InferenceBackend` (`client/inference/`) -- either a local Ollama server
+  or a supervised `llama-server` process -- that stays loaded across every
+  job instead of being spawned and reloaded per request. The model itself
+  never crosses the wire, only prompts and generation params do, and those
+  are validated against strict, provider-controlled bounds
+  (`client/inference/schema.py`) before ever reaching the model.
+
 Accounts authenticate with an API key, never a password -- email is
 collected only so `reset.php` can send a one-time link to reissue a lost
 key or delete the account. The backoffice enforces that you can only
