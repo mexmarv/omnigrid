@@ -130,6 +130,17 @@ $hub = hub_base_url();
     </div>
 
     <h2>Configure Omnigent</h2>
+    <div class="warn" style="margin-bottom:16px;">
+      <strong>Connect a host first</strong> -- Omnigent sessions execute on
+      a "host" (your own machine or a Databricks-managed sandbox), not the
+      chat UI itself. A blank host menu or a "Connect a host" prompt when
+      starting a session means nothing below will run yet:
+      <pre class="copyable" style="margin-top:10px;"><code>curl -fsSL https://omnigent.ai/install.sh | sh -s -- --extra "databricks"
+omni setup
+omni login &lt;your-workspace-url&gt;
+omni host --server &lt;your-workspace-url&gt;</code></pre>
+      Keep that running and pick the host it registers before continuing.
+    </div>
     <p class="sub" style="margin-bottom:12px;">
       Easiest: paste this into Omnigent's "Describe a task to start a new
       session..." box and it writes the agent + MCP config for you:

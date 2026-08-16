@@ -46,6 +46,25 @@ that's what you ask for by name once it's wired up.
 <details>
 <summary><b>Omnigent</b> -- Databricks' open-source meta-harness</summary>
 
+**Connect a host first, or nothing below will actually run.** Omnigent
+sessions execute on a "host" -- your own machine, or a Databricks-managed
+cloud sandbox -- not directly in the chat UI itself. If you haven't
+connected one yet (Omnigent's "Connect a host" dialog, or a blank host
+menu when starting a session, is the tell), install the CLI and register
+your machine as one:
+
+```bash
+curl -fsSL https://omnigent.ai/install.sh | sh -s -- --extra "databricks"
+omni setup
+omni login <your-workspace-url>
+omni host --server <your-workspace-url>
+```
+
+(`<your-workspace-url>` is the same `https://adb-....azuredatabricks.net`
+URL Omnigent's own "Connect a host" dialog shows you, pre-filled into that
+exact command.) Keep that process running, pick the host it registers
+from the session's host menu, *then* wire up the MCP tool below.
+
 Omnigent has an actual **Create custom agent** form -- Name, Description,
 Harness, Model, System instructions, and an **MCP Tools &rarr; + Add
 server** button at the bottom. Clicking it opens a server-name field, a
