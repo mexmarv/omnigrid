@@ -295,6 +295,79 @@ function renderRelativeTimes() {
 renderRelativeTimes();
 setInterval(renderRelativeTimes, 30000);
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Mirrors friendly_task_type() in index.php -- keep the two in sync.
+function friendlyTaskType(taskType) {
+  if (taskType.startsWith('llm_infer:')) return 'Text generation (' + taskType.slice('llm_infer:'.length) + ')';
+  if (taskType.startsWith('vlm_infer:')) return 'Vision-language (' + taskType.slice('vlm_infer:'.length) + ')';
+  if (taskType === 'tensor_op') return 'Tensor operation';
+  if (taskType === 'onnx_infer') return 'ONNX inference';
+  return taskType;
+}
+
+function renderSharingBlock(s) {
+  const el = document.getElementById('sharing-block');
+  if (s.providers_online === 0 && s.hosted_models.length === 0) {
+    el.innerHTML = '<div class="card empty">Nobody\'s online right now -- '
+      + '<a href="register.php" style="color:var(--accent-2)">be the first to share something</a>.</div>';
+    return;
+  }
+  let html = '<div class="card">';
+  if (s.providers_online > 0) {
+    const gpuSuffix = s.gpu_providers > 0 ? ' (' + s.gpu_providers + ' with a GPU)' : '';
+    html += '<p style="margin:0 0 12px; color:var(--muted); font-size:14px;" id="sharing-summary">'
+      + s.total_cores + ' CPU cores and ' + (s.total_ram_mb / 1024).toFixed(1) + ' GB RAM donated across '
+      + s.providers_online + ' machine' + (s.providers_online === 1 ? '' : 's') + gpuSuffix + '.</p>';
+  }
+  if (s.hosted_models.length > 0) {
+    html += '<p style="margin:0 0 10px; color:var(--muted); font-size:13px;">LLM models available for text generation:</p>'
+      + '<div class="tags" id="hosted-models-tags">';
+    for (const model of s.hosted_models) html += '<span class="tag">' + escapeHtml(model) + '</span>';
+    html += '</div>';
+  } else if (s.providers_online > 0) {
+    html += '<p style="margin:0; color:var(--muted); font-size:13px;" id="hosted-models-empty">'
+      + "No one's hosting an LLM for generation right now -- only raw compute (tensor ops, ONNX inference).</p>";
+  }
+  el.innerHTML = html + '</div>';
+}
+
+function renderLeaderboardBlock(s) {
+  const el = document.getElementById('leaderboard-block');
+  if (s.leaderboard.length === 0) {
+    el.innerHTML = "<div class=\"empty\">Nobody's shared or used compute here yet -- be the first.</div>";
+    return;
+  }
+  let html = '';
+  s.leaderboard.forEach(function (row, i) {
+    const rankClass = i === 0 ? 'gold' : (i === 1 ? 'silver' : (i === 2 ? 'bronze' : ''));
+    html += '<div class="rank-row"><div class="rank-badge ' + rankClass + '">' + (i + 1) + '</div>'
+      + '<div class="name">' + escapeHtml(row.name) + '</div>'
+      + '<div class="credits">' + row.credits.toFixed(1) + '</div></div>';
+  });
+  el.innerHTML = html;
+}
+
+function renderActivityBlock(s) {
+  const el = document.getElementById('activity-block');
+  if (s.recent_activity.length === 0) {
+    el.innerHTML = '<div class="empty">Nothing\'s run yet.</div>';
+    return;
+  }
+  let html = '';
+  s.recent_activity.forEach(function (job) {
+    html += '<div class="activity-row" data-finished-at="' + job.finished_at + '">'
+      + '<div>' + escapeHtml(friendlyTaskType(job.task_type)) + '</div>'
+      + '<div class="when">' + job.compute_seconds.toFixed(2) + 's compute &middot; <span class="rel-time"></span></div></div>';
+  });
+  el.innerHTML = html;
+  renderRelativeTimes();
+}
+
 async function refreshStats() {
   try {
     const res = await fetch('api/stats.php');
@@ -303,9 +376,9 @@ async function refreshStats() {
     document.getElementById('stat-hours').textContent = s.compute_hours_donated;
     document.getElementById('stat-jobs').textContent = s.jobs_done + ' / ' + s.jobs_total;
     document.getElementById('stat-multimodal').textContent = s.multimodal_jobs_done + ' / ' + s.multimodal_jobs_total;
-    // Leaderboard, sharing block, and activity feed refresh on next full page
-    // load -- keeping this lightweight avoids rebuilding DOM structures (and
-    // their event state) on every poll for data that rarely changes second to second.
+    renderSharingBlock(s);
+    renderLeaderboardBlock(s);
+    renderActivityBlock(s);
   } catch (e) { /* offline or mid-deploy -- just skip this tick */ }
 }
 setInterval(refreshStats, 15000);
