@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="Omnigrid -- spare compute, shared like a signal, not sold like a service" width="820">
+  <img src="docs/banner.svg" alt="Omnigrid -- spare CPU/RAM/GPU and open-model LLM inference, one MCP tool away" width="820">
 </p>
 
 <p align="center">
