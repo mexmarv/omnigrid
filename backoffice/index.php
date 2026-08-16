@@ -64,8 +64,8 @@ function friendly_task_type(string $taskType): string {
   .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
 
   .hero { margin-bottom: 40px; display: flex; align-items: center; gap: 28px; }
-  .hero img.logo { width: 110px; height: 110px; flex-shrink: 0; }
-  @media (max-width: 560px) { .hero { flex-direction: column; align-items: flex-start; gap: 16px; } .hero img.logo { width: 80px; height: 80px; } }
+  .hero img.logo { width: 110px; height: auto; flex-shrink: 0; }
+  @media (max-width: 560px) { .hero { flex-direction: column; align-items: flex-start; gap: 16px; } .hero img.logo { width: 80px; height: auto; } }
   .live {
     display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--accent);
     background: rgba(192,132,252,0.08); border: 1px solid rgba(192,132,252,0.25);
