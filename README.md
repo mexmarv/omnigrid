@@ -268,9 +268,23 @@ client you just wired up:
 > to write a two-sentence summary of why octopuses are considered
 > intelligent.
 
-That one calls `list_models` then `offload_llm_generate`. For raw compute
-instead of text generation -- no model, no GPU required from anyone -- the
-same tool call pattern works for `offload_tensor_op` too:
+That one calls `list_models` then `offload_llm_generate`. **For an image plus
+text, use `offload_vlm_generate` instead** -- `offload_llm_generate` is
+text-only and has no field for an image at all, so asking for it by name
+on an image prompt just silently drops the picture:
+
+> Use Omnigrid's offload_vlm_generate to have `<model-name>` explain what's
+> in this image.
+
+Whether the image data actually reaches the tool call depends on whether
+your harness bridges attached images into MCP tool arguments as base64 --
+not every harness does. If the response describes the image correctly,
+it worked; if it hallucinates or the tool errors on a missing/empty
+image field, ask it explicitly to "read the image file, base64-encode it,
+and pass that as image_b64" instead of relying on the attachment alone.
+
+For raw compute instead of text generation -- no model, no GPU required
+from anyone -- the same tool call pattern works for `offload_tensor_op` too:
 
 > Use the omnigrid tool to compute the matrix product of [[1, 2], [3, 4]]
 > and [[5, 6], [7, 8]].
@@ -353,8 +367,8 @@ whichever provider currently has that resource:
 | Operation | Python (`client_sdk`) | MCP tool (Omnigent/Claude/etc.) | Does what |
 |---|---|---|---|
 | List what's hosted | -- (check the dashboard) | `list_models` | Names of LLM models currently being shared for free. |
-| Generate text | `run_llm_infer(...)` | `offload_llm_generate` | Runs your prompt on a community-hosted model's CPU/GPU. |
-| Generate from text + image | `run_vlm_infer(...)` | `offload_vlm_generate` | Runs your prompt (and optional image) on a community-hosted vision-language model. |
+| Generate text | `run_llm_infer(...)` | `offload_llm_generate` | Text-only -- no image field. Runs your prompt on a community-hosted model's CPU/GPU. |
+| Generate from text (+ optional image) | `run_vlm_infer(...)` | `offload_vlm_generate` | Use this one, not `offload_llm_generate`, whenever an image is involved. |
 | Run a tensor op | `run_tensor_op(...)` | `offload_tensor_op` | matmul/add/multiply/relu/sum/mean on someone's spare CPU. |
 | Run an ONNX model | `run_onnx_infer(...)` | -- (Python only for now) | Runs a model *you* supply on someone else's CPU/GPU. |
 | Check a slow job | -- (handled for you) | `check_job_result` | Only needed if a job didn't finish immediately -- see above. |
