@@ -453,11 +453,28 @@ whichever provider currently has that resource:
 | Run a tensor op | `run_tensor_op(...)` | `offload_tensor_op` | matmul/add/multiply/relu/sum/mean on someone's spare CPU. |
 | Run an ONNX model | `run_onnx_infer(...)` | -- (Python only for now) | Runs a model *you* supply on someone else's CPU/GPU. |
 | Check a slow job | -- (handled for you) | `check_job_result` | Only needed if a job didn't finish immediately -- see above. |
+| Submit an image as a raw file | `POST /api/jobs_submit_image.php` (multipart upload, not an MCP tool) | Uploads the image bytes directly -- the backoffice base64-encodes it server-side and queues the same `vlm_infer` job `offload_vlm_generate` would, without you ever having to embed a base64 string in a JSON body or tool call yourself. |
 
 That's the whole surface area. Nothing here is a general-purpose remote
 shell or a way to run arbitrary code -- these four operations, and
 whatever a provider's own machine decides to do with the data it's handed,
 are the entire vocabulary of the network.
+
+Sending an image through an MCP tool call means embedding it as a base64
+string in the tool's JSON arguments -- fine for a small image, unwieldy
+for anything bigger. `jobs_submit_image.php` skips that entirely: upload
+the raw file, get a `job_id` back, then poll it the normal way:
+
+```bash
+curl -X POST https://chanza.ai/api/jobs_submit_image.php \
+  -H "Authorization: Bearer $OMNIGRID_API_KEY" \
+  -F "image=@photo.jpg" \
+  -F "task_type=vlm_infer:moondream-m4" \
+  -F "prompt=Describe this image in one or two sentences."
+# -> {"job_id": 123}
+
+curl "https://chanza.ai/api/jobs_get.php?id=123"
+```
 
 ## Where the savings actually come from
 
