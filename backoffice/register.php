@@ -217,6 +217,13 @@ considered intelligent.</code></pre>
     <h2>Or share compute from the command line</h2>
     <pre class="copyable"><code>python3 agent.py --api-key "<?= e($result['api_key']) ?>" --cpu-cores 2 --ram-mb 2048 \
     --coordinator <?= e($hub) ?></code></pre>
+    <p class="sub" style="margin:10px 0 6px; font-size:13px;">
+      Have a free <a href="https://build.nvidia.com" style="color:var(--accent-2)">build.nvidia.com</a>
+      API key instead of a local model? No GPU needed -- the inference runs on NVIDIA's side:
+    </p>
+    <pre class="copyable"><code>python3 agent.py --api-key "<?= e($result['api_key']) ?>" --cpu-cores 1 --ram-mb 512 \
+    --coordinator <?= e($hub) ?> \
+    --nvidia-api-key "nvapi-your-own-key" --nvidia-model-name my-vision-model</code></pre>
 
     <h2>Or call it directly from Python</h2>
     <pre class="copyable"><code>import client_sdk as cc

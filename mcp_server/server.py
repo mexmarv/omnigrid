@@ -49,14 +49,15 @@ mcp = MCPServer("omnigrid")
 
 @mcp.tool()
 def list_models() -> list[str]:
-    """List LLM models currently hosted by online providers on the Omnigrid network."""
+    """List LLM/VLM models currently hosted by online providers on the Omnigrid network."""
     resp = requests.get(f"{HUB}/api/providers_list.php")
     resp.raise_for_status()
     models = set()
     for provider in resp.json():
         for task_type in provider["task_types"].split(","):
-            if task_type.startswith("llm_infer:"):
-                models.add(task_type.split(":", 1)[1])
+            for prefix in ("llm_infer:", "vlm_infer:"):
+                if task_type.startswith(prefix):
+                    models.add(task_type.split(":", 1)[1])
     return sorted(models)
 
 
@@ -70,6 +71,21 @@ def offload_llm_generate(prompt: str, model_name: str, max_tokens: int = 256,
     return cc.run_llm_infer(
         prompt, model_name=model_name, account_name=ACCOUNT, email=EMAIL, api_key=API_KEY,
         coordinator=HUB, max_tokens=max_tokens, temperature=temperature, system=system,
+    )
+
+
+@mcp.tool()
+def offload_vlm_generate(prompt: str, model_name: str, image_b64: str | None = None,
+                          image_mime: str = "image/jpeg", max_tokens: int = 512) -> str:
+    """Generate text from a prompt and an optional image using a community-hosted
+    vision-language model (e.g. a free NVIDIA-hosted model relayed through a
+    provider's own API key). Use list_models() first to see what's available.
+    """
+    import base64
+    image_bytes = base64.b64decode(image_b64) if image_b64 else None
+    return cc.run_vlm_infer(
+        prompt, model_name=model_name, image_bytes=image_bytes, image_mime=image_mime,
+        account_name=ACCOUNT, email=EMAIL, api_key=API_KEY, coordinator=HUB, max_tokens=max_tokens,
     )
 
 

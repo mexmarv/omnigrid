@@ -132,6 +132,24 @@ switch ($method) {
                 ],
             ],
             [
+                'name' => 'offload_vlm_generate',
+                'description' => 'Generate text from a prompt and an optional image using a community-hosted ' .
+                    'vision-language model (e.g. a free NVIDIA-hosted model relayed through a provider\'s own ' .
+                    'API key). Call list_models first to see what is currently available. If the provider is ' .
+                    'slow, this returns a job_id instead of the text -- call check_job_result with it to keep waiting.',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'prompt' => ['type' => 'string'],
+                        'model_name' => ['type' => 'string'],
+                        'image_b64' => ['type' => 'string', 'description' => 'optional base64-encoded image'],
+                        'image_mime' => ['type' => 'string', 'default' => 'image/jpeg'],
+                        'max_tokens' => ['type' => 'integer', 'default' => 512],
+                    ],
+                    'required' => ['prompt', 'model_name'],
+                ],
+            ],
+            [
                 'name' => 'offload_tensor_op',
                 'description' => 'Run a numeric tensor operation (matmul/add/multiply/relu/sum/mean) on the ' .
                     'network. If the provider is slow, this returns a job_id instead of the result -- call ' .
@@ -190,6 +208,26 @@ switch ($method) {
             $modelName = $args['model_name'] ?? '';
             $job = submit_job_and_wait($pdo, (int)$account['id'], "llm_infer:$modelName", $payloadB64,
                                         1.0, 1024, 300, INITIAL_WAIT_S);
+            if ($job['status'] === 'done') {
+                tool_result_from_job($id, $job);
+            } elseif ($job['status'] === 'timeout') {
+                tool_pending_result($id, $job['job_id']);
+            } else {
+                tool_error($id, $job['error'] ?? 'Job failed.');
+            }
+        } elseif ($name === 'offload_vlm_generate') {
+            $payload = [
+                'prompt' => $args['prompt'] ?? '',
+                'max_tokens' => (int)($args['max_tokens'] ?? 512),
+            ];
+            if (!empty($args['image_b64'])) {
+                $payload['image_b64'] = $args['image_b64'];
+                $payload['image_mime'] = $args['image_mime'] ?? 'image/jpeg';
+            }
+            $payloadB64 = base64_encode(json_encode($payload));
+            $modelName = $args['model_name'] ?? '';
+            $job = submit_job_and_wait($pdo, (int)$account['id'], "vlm_infer:$modelName", $payloadB64,
+                                        1.0, 512, 60, INITIAL_WAIT_S);
             if ($job['status'] === 'done') {
                 tool_result_from_job($id, $job);
             } elseif ($job['status'] === 'timeout') {

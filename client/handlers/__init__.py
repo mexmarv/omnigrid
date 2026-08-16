@@ -8,4 +8,6 @@ try:
 except ImportError:
     pass  # llama-cpp-python not installed on this provider -- llm_infer stays unavailable
 
+from . import nvidia_vlm  # noqa: F401 -- only needs `requests`, always available
+
 __all__ = ["get_handler", "installed_task_types"]

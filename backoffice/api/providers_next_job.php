@@ -22,9 +22,19 @@ $stmt->execute([$provider['cpu_cores'], $provider['ram_mb']]);
 $candidates = $stmt->fetchAll();
 
 $supported = explode(',', $provider['task_types']);
+
+// Claim atomically: two providers hosting the same model can poll at nearly
+// the same instant, both see the same queued job, and both try to take it.
+// The UPDATE's own WHERE status='queued' makes only one of them actually win --
+// whoever loses just moves on to the next candidate instead of double-running it.
+$claim = $pdo->prepare("UPDATE jobs SET status='assigned', provider_id=? WHERE id=? AND status='queued'");
 $job = null;
 foreach ($candidates as $candidate) {
-    if (in_array($candidate['task_type'], $supported, true)) {
+    if (!in_array($candidate['task_type'], $supported, true)) {
+        continue;
+    }
+    $claim->execute([$provider['id'], $candidate['id']]);
+    if ($claim->rowCount() === 1) {
         $job = $candidate;
         break;
     }
@@ -35,8 +45,6 @@ if ($job === null) {
     exit; // HTTP 204 must not carry a body
 }
 
-$stmt = $pdo->prepare("UPDATE jobs SET status='assigned', provider_id=? WHERE id=?");
-$stmt->execute([$provider['id'], $job['id']]);
 $pdo->prepare('UPDATE providers SET busy = 1 WHERE id = ?')->execute([$provider['id']]);
 
 $stmt = $pdo->prepare('SELECT * FROM jobs WHERE id = ?');

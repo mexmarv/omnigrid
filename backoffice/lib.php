@@ -60,8 +60,18 @@ function require_auth(PDO $pdo): array {
     return $account;
 }
 
-/** task_type strings look like "llm_infer:<model-name>" -- this returns the model names,
- * deduped, from whichever providers are currently online. */
+/** task_type strings look like "llm_infer:<model-name>" or "vlm_infer:<model-name>" --
+ * this pulls the model name out of either family, or null if it's neither. */
+function model_name_from_task_type(string $taskType): ?string {
+    foreach (['llm_infer:', 'vlm_infer:'] as $prefix) {
+        if (str_starts_with($taskType, $prefix)) {
+            return substr($taskType, strlen($prefix));
+        }
+    }
+    return null;
+}
+
+/** Model names, deduped, from whichever providers are currently online. */
 function list_hosted_models(PDO $pdo): array {
     $cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;
     $stmt = $pdo->prepare('SELECT task_types FROM providers WHERE last_heartbeat >= ?');
@@ -69,8 +79,9 @@ function list_hosted_models(PDO $pdo): array {
     $models = [];
     foreach ($stmt->fetchAll() as $row) {
         foreach (explode(',', $row['task_types']) as $taskType) {
-            if (str_starts_with($taskType, 'llm_infer:')) {
-                $models[] = substr($taskType, strlen('llm_infer:'));
+            $name = model_name_from_task_type($taskType);
+            if ($name !== null) {
+                $models[] = $name;
             }
         }
     }
@@ -99,8 +110,9 @@ function dashboard_snapshot(PDO $pdo): array {
             $gpuProviders++;
         }
         foreach (explode(',', $p['task_types']) as $taskType) {
-            if (str_starts_with($taskType, 'llm_infer:')) {
-                $hostedModels[] = substr($taskType, strlen('llm_infer:'));
+            $name = model_name_from_task_type($taskType);
+            if ($name !== null) {
+                $hostedModels[] = $name;
             }
         }
     }

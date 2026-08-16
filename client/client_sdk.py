@@ -107,6 +107,25 @@ def run_llm_infer(prompt: str, *, model_name: str, account_name: str | None = No
     return result["text"]
 
 
+def run_vlm_infer(prompt: str, *, model_name: str, image_bytes: bytes | None = None,
+                   image_mime: str = "image/jpeg", account_name: str | None = None,
+                   email: str | None = None, api_key: str | None = None,
+                   coordinator="http://127.0.0.1:8000", max_tokens=512,
+                   cpu_limit=1.0, ram_limit_mb=512, timeout_s=60, max_wait_s=300) -> str:
+    """Offload a vision-language prompt (optionally with an image) to a provider
+    hosting `model_name` -- typically a free NVIDIA-hosted model, relayed through
+    the provider's own API key. Only the prompt/image data travels over the wire.
+    """
+    payload = {"prompt": prompt, "max_tokens": max_tokens}
+    if image_bytes:
+        payload["image_b64"] = base64.b64encode(image_bytes).decode("ascii")
+        payload["image_mime"] = image_mime
+    job_id = _submit(coordinator, account_name, email, api_key, f"vlm_infer:{model_name}", payload,
+                      cpu_limit, ram_limit_mb, timeout_s)
+    result = _wait_for_result(coordinator, job_id, max_wait_s=max_wait_s)
+    return result["text"]
+
+
 def run_onnx_infer(model_bytes: bytes, input_array, *, account_name: str | None = None,
                     email: str | None = None, api_key: str | None = None,
                     coordinator="http://127.0.0.1:8000", input_name=None,

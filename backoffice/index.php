@@ -9,6 +9,9 @@ function friendly_task_type(string $taskType): string {
     if (str_starts_with($taskType, 'llm_infer:')) {
         return 'Text generation (' . substr($taskType, strlen('llm_infer:')) . ')';
     }
+    if (str_starts_with($taskType, 'vlm_infer:')) {
+        return 'Vision-language (' . substr($taskType, strlen('vlm_infer:')) . ')';
+    }
     return match ($taskType) {
         'tensor_op' => 'Tensor operation',
         'onnx_infer' => 'ONNX inference',
@@ -45,8 +48,7 @@ function friendly_task_type(string $taskType): string {
     z-index: 10;
   }
   nav .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-  nav .brand img { width: 28px; height: 28px; border-radius: 8px; }
-  nav .brand span { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  nav .brand span { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: #ffffff; }
   nav .links { display: flex; align-items: center; gap: 18px; font-size: 13.5px; flex-wrap: wrap; }
   nav .links a { color: var(--muted); text-decoration: none; white-space: nowrap; }
   nav .links a:hover { color: var(--text); }
@@ -61,7 +63,9 @@ function friendly_task_type(string $taskType): string {
 
   .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
 
-  .hero { margin-bottom: 40px; }
+  .hero { margin-bottom: 40px; display: flex; align-items: center; gap: 28px; }
+  .hero img.logo { width: 110px; height: 110px; flex-shrink: 0; }
+  @media (max-width: 560px) { .hero { flex-direction: column; align-items: flex-start; gap: 16px; } .hero img.logo { width: 80px; height: 80px; } }
   .live {
     display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--accent);
     background: rgba(192,132,252,0.08); border: 1px solid rgba(192,132,252,0.25);
@@ -149,7 +153,7 @@ function friendly_task_type(string $taskType): string {
 <body>
 
 <nav>
-  <a class="brand" href="index.php"><img src="assets/logo.png" alt=""><span>Omnigrid</span></a>
+  <a class="brand" href="index.php"><span>Omnigrid</span></a>
   <div class="links">
     <a href="register.php">Get an API key</a>
     <a href="reset.php">Reset access</a>
@@ -160,10 +164,13 @@ function friendly_task_type(string $taskType): string {
 
 <div class="wrap">
   <div class="hero">
-    <div class="live"><span class="dot"></span> live network</div>
-    <h1>Community compute for AI agents</h1>
-    <p class="tagline">Spare CPU/RAM/GPU and open-model LLM inference, shared not sold.
-       Every number on this page is real and updates automatically -- nothing here is a mockup.</p>
+    <img class="logo" src="assets/logo.png" alt="Omnigrid">
+    <div>
+      <div class="live"><span class="dot"></span> live network</div>
+      <h1>Community compute for AI agents</h1>
+      <p class="tagline">Spare CPU/RAM/GPU and open-model LLM inference, shared not sold.
+         Every number on this page is real and updates automatically -- nothing here is a mockup.</p>
+    </div>
   </div>
 
   <div class="stats">
