@@ -479,12 +479,23 @@ the raw file, get a `job_id` back, then poll it the normal way:
 curl -X POST https://chanza.ai/api/jobs_submit_image.php \
   -H "Authorization: Bearer $OMNIGRID_API_KEY" \
   -F "image=@photo.jpg" \
-  -F "task_type=vlm_infer:moondream-m4" \
+  -F "task_type=vlm_infer:llava-7b-m4" \
   -F "prompt=Describe this image in one or two sentences."
 # -> {"job_id": 123}
 
 curl "https://chanza.ai/api/jobs_get.php?id=123"
 ```
+
+**Copy-paste prompt for your AI agent** -- attach a photo in chat and say
+this (works with any agent that has file/shell tools; swap the model
+name for whatever's actually listed on [chanza.ai](https://chanza.ai) if
+`llava-7b-m4` isn't hosted anymore):
+
+> Take the photo I just attached, save it to a local file, then upload
+> it to https://chanza.ai/api/jobs_submit_image.php via a multipart POST
+> (not base64-in-JSON) with your chanza.ai API key, task_type
+> `vlm_infer:llava-7b-m4`, and a description prompt. Poll `jobs_get.php`
+> until it's done and tell me what it sees.
 
 ## Where the savings actually come from
 
