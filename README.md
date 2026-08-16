@@ -48,17 +48,31 @@ that's what you ask for by name once it's wired up.
 
 Omnigent has an actual **Create custom agent** form -- Name, Description,
 Harness, Model, System instructions, and an **MCP Tools &rarr; + Add
-server** button at the bottom. Click that and point it at the server
-below. (We've seen this form directly but not yet the exact field labels
-inside that specific "Add server" sub-dialog -- whatever it asks for, the
-URL and Authorization header below are what it needs.)
+server** button at the bottom. Clicking it opens a server-name field, a
+transport dropdown (defaults to **stdio**), then command/args/environment
+fields for that transport. Those stdio fields map directly onto this
+repo's local MCP server -- confirmed, not a guess:
+
+```
+server-name:  omnigrid
+command:      python3
+args:         /path/to/omnigrid/mcp_server/server.py
+env:          OMNIGRID_API_KEY=your-api-key
+              OMNIGRID_HUB=https://chanza.ai
+```
+
+That runs `mcp_server/server.py` as a local process alongside Omnigent --
+needs Python and this repo checked out wherever Omnigent runs. If that
+dropdown also offers an HTTP option (not yet confirmed), the hosted
+endpoint should work there the same way it does in every other client
+in this list:
 
 ```
 URL:     https://chanza.ai/mcp.php
 Header:  Authorization: Bearer your-api-key
 ```
 
-Prefer describing it instead of using the form? Omnigent is chat-first
+Prefer describing it instead of clicking through the form? Omnigent is chat-first
 too -- paste this into its "Describe a task to start a new session..."
 box and it authors the config for you (swap in your real key from
 [chanza.ai/register.php](https://chanza.ai/register.php) -- that page

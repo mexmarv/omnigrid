@@ -131,14 +131,29 @@ $hub = hub_base_url();
 
     <h2>Configure Omnigent</h2>
     <p class="sub" style="margin-bottom:12px;">
-      Omnigent doesn't have a settings screen for this -- it's chat-first.
-      Paste this into its "Describe a task to start a new session..." box
-      and it writes the agent config for you:
+      Easiest: paste this into Omnigent's "Describe a task to start a new
+      session..." box and it writes the agent + MCP config for you:
     </p>
     <pre class="copyable"><code>Set up a new agent with an MCP tool called "omnigrid" over HTTP, pointing
 at <?= e($hub) ?>/mcp.php, with an Authorization header set to
 "Bearer <?= e($result['api_key']) ?>". It should be able to call
 list_models, offload_llm_generate, and offload_tensor_op through that tool.</code></pre>
+
+    <p class="sub" style="margin:16px 0 6px; font-size:13.5px;">
+      Prefer clicking through it yourself? Omnigent also has a
+      <b>Create custom agent</b> form -- fill in a name and model, then
+      under <b>MCP Tools</b> click <b>+ Add server</b> and enter:
+    </p>
+    <pre class="copyable"><code>server-name:  omnigrid
+command:      python3
+args:         /path/to/omnigrid/mcp_server/server.py
+env:          OMNIGRID_API_KEY=<?= e($result['api_key']) ?>
+              OMNIGRID_HUB=<?= e($hub) ?></code></pre>
+    <p class="sub" style="margin:6px 0 0; font-size:12.5px;">
+      (Requires Python and this repo checked out wherever Omnigent runs.
+      If that form's transport dropdown offers an HTTP option instead of
+      stdio, use the URL + header from the YAML below there instead.)
+    </p>
 
     <p class="sub" style="margin:16px 0 6px; font-size:13.5px;">
       Then, once it's wired up, just ask for it in plain language -- for example:
