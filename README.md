@@ -494,8 +494,10 @@ name for whatever's actually listed on [chanza.ai](https://chanza.ai) if
 > Take the photo I just attached, save it to a local file, then upload
 > it to https://chanza.ai/api/jobs_submit_image.php via a multipart POST
 > (not base64-in-JSON) with your chanza.ai API key, task_type
-> `vlm_infer:llava-7b-m4`, and a description prompt. Poll `jobs_get.php`
-> until it's done and tell me what it sees.
+> `vlm_infer:llava-7b-m4`, and a description prompt. Poll
+> `jobs_get.php?id=<job_id>` until `status` is `done`, then base64-decode
+> its `result_b64` field to JSON and read the `text` field -- that's what
+> it sees.
 
 ## Where the savings actually come from
 

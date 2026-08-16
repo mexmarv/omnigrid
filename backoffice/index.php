@@ -28,15 +28,15 @@ function friendly_task_type(string $taskType): string {
 <style>
   :root {
     --bg: #0a0d13; --panel: #121722; --panel-2: #171d2b; --border: #232b3d;
-    --text: #e7ecf5; --muted: #9a94b3; --accent: #c084fc; --accent-2: #e879f9;
+    --text: #e7ecf5; --muted: #9a94b3; --accent: #8b5cf6; --accent-2: #ec4899;
     --gold: #f5c453; --silver: #c9d2e0; --bronze: #d18b5c;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-image: radial-gradient(circle at 12% -10%, rgba(232,121,249,0.14), transparent 42%),
-                       radial-gradient(circle at 90% 10%, rgba(192,132,252,0.11), transparent 40%);
+    background-image: radial-gradient(circle at 12% -10%, rgba(236,72,153,0.14), transparent 42%),
+                       radial-gradient(circle at 90% 10%, rgba(139,92,246,0.11), transparent 40%);
     background-attachment: fixed;
   }
   a { color: inherit; }
@@ -68,7 +68,7 @@ function friendly_task_type(string $taskType): string {
   @media (max-width: 560px) { .hero { flex-direction: column; align-items: flex-start; gap: 16px; } .hero img.logo { width: 80px; height: auto; } }
   .live {
     display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--accent);
-    background: rgba(192,132,252,0.08); border: 1px solid rgba(192,132,252,0.25);
+    background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.25);
     padding: 5px 12px; border-radius: 999px; margin-bottom: 16px;
   }
   .live .dot {
@@ -78,6 +78,20 @@ function friendly_task_type(string $taskType): string {
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
   h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.02em; }
   .tagline { color: var(--muted); margin: 0; font-size: 15.5px; max-width: 60ch; line-height: 1.55; }
+
+  .install-block { margin-bottom: 36px; }
+  .install-block .copyable {
+    position: relative; font-family: ui-monospace, SFMono-Regular, monospace;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; font-size: 13px; white-space: pre-wrap; word-break: normal;
+    overflow-x: auto; line-height: 1.6; margin-bottom: 8px;
+  }
+  .install-block .copy-btn {
+    position: absolute; top: 8px; right: 8px; padding: 5px 10px; font-size: 11.5px;
+    font-weight: 600; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--muted); cursor: pointer;
+  }
+  .install-block .copy-btn:hover { color: var(--text); border-color: var(--accent-2); }
 
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 36px; }
   .card {
@@ -160,7 +174,7 @@ function friendly_task_type(string $taskType): string {
     <a href="register.php">Get an API key</a>
     <a href="reset.php">Reset access</a>
     <a href="https://github.com/mexmarv/omnigrid">GitHub</a>
-    <a class="cta" href="register.php">Share compute &rarr;</a>
+    <a class="cta" href="register.php">Share or use compute &rarr;</a>
   </div>
 </nav>
 
@@ -173,6 +187,16 @@ function friendly_task_type(string $taskType): string {
       <p class="tagline">Spare CPU/RAM/GPU and open-model LLM inference, shared not sold.
          Every number on this page is real and updates automatically -- nothing here is a mockup.</p>
     </div>
+  </div>
+
+  <div class="install-block">
+    <h2>Add it to your agent</h2>
+    <p class="subnote">Same command in Claude Code or Gemini CLI --
+      <a href="register.php" style="color:var(--accent-2)">get an API key</a> first, then swap it in below.</p>
+    <div class="copyable"><code>claude mcp add --transport http omnigrid https://chanza.ai/mcp.php \
+  --header "Authorization: Bearer YOUR_API_KEY"</code></div>
+    <div class="copyable"><code>gemini mcp add --transport http omnigrid https://chanza.ai/mcp.php \
+  --header "Authorization: Bearer YOUR_API_KEY"</code></div>
   </div>
 
   <div class="stats">
@@ -275,6 +299,10 @@ function friendly_task_type(string $taskType): string {
     <span>Nothing here executes remote code -- providers only ever run their own
       fixed, audited handlers on data-only payloads.</span>
     <span><a href="https://github.com/mexmarv/omnigrid">README &amp; source</a></span>
+    <span style="width:100%; text-align:center; margin-top:8px;">
+      &copy; Marvin Nahmias &middot;
+      <a href="https://buymeacoffee.com/mexmarv">Buy me a coffee</a>
+    </span>
   </footer>
 </div>
 
@@ -294,6 +322,21 @@ function renderRelativeTimes() {
 }
 renderRelativeTimes();
 setInterval(renderRelativeTimes, 30000);
+
+document.querySelectorAll('.install-block .copyable').forEach(function (el) {
+  const originalText = el.innerText;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'copy-btn';
+  btn.textContent = 'Copy';
+  btn.addEventListener('click', function () {
+    navigator.clipboard.writeText(originalText).then(function () {
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+    });
+  });
+  el.appendChild(btn);
+});
 
 function escapeHtml(str) {
   const div = document.createElement('div');

@@ -53,14 +53,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <style>
   :root {
     --bg: #0b0e14; --panel: #121722; --panel-2: #171d2b; --border: #232b3d;
-    --text: #e7ecf5; --muted: #9a94b3; --accent: #c084fc; --accent-2: #e879f9; --danger: #ff8080;
+    --text: #e7ecf5; --muted: #9a94b3; --accent: #8b5cf6; --accent-2: #ec4899; --danger: #ff8080;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-image: radial-gradient(circle at 15% 0%, rgba(232,121,249,0.12), transparent 40%),
-                       radial-gradient(circle at 85% 20%, rgba(192,132,252,0.10), transparent 40%);
+    background-image: radial-gradient(circle at 15% 0%, rgba(236,72,153,0.12), transparent 40%),
+                       radial-gradient(circle at 85% 20%, rgba(139,92,246,0.10), transparent 40%);
   }
   .wrap { max-width: 640px; margin: 0 auto; padding: 56px 24px 80px; }
   a.back { color: var(--muted); font-size: 13.5px; text-decoration: none; }
@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   .actions { display: flex; gap: 12px; flex-wrap: wrap; }
   .error { color: var(--danger); font-size: 14px; margin-bottom: 16px; }
   .notice {
-    background: rgba(192,132,252,0.08); border: 1px solid rgba(192,132,252,0.3);
+    background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.3);
     border-radius: 10px; padding: 14px 16px; font-size: 13.5px; color: var(--accent);
   }
   .warn {
@@ -101,6 +101,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     background: var(--panel); color: var(--muted); cursor: pointer;
   }
   .copy-btn:hover { color: var(--text); border-color: var(--accent-2); }
+  h2 { font-size: 15px; color: var(--muted); font-weight: 600; text-transform: uppercase;
+       letter-spacing: 0.06em; margin: 28px 0 12px; }
+  pre.copyable { white-space: pre-wrap; word-break: normal; overflow-x: auto; line-height: 1.6; }
+  code { font-family: ui-monospace, SFMono-Regular, monospace; }
 </style>
 </head>
 <body>
@@ -115,6 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <label>API key</label>
       <div class="copyable"><?= e($newApiKey) ?></div>
     </div>
+    <?php $apiKey = $newApiKey; require __DIR__ . '/_account_instructions.php'; ?>
 
   <?php elseif ($deleted): ?>
     <p class="sub">Done. The account and any providers it registered are gone.
