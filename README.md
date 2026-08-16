@@ -82,10 +82,13 @@ denied by the sandbox) rather than anything wrong with omnigrid itself.
 
 Omnigent has an actual **Create custom agent** form -- Name, Description,
 Harness, Model, System instructions, and an **MCP Tools &rarr; + Add
-server** button at the bottom. Clicking it opens a server-name field, a
-transport dropdown (defaults to **stdio**), then command/args/environment
-fields for that transport. Those stdio fields map directly onto this
-repo's local MCP server -- confirmed, not a guess:
+server** button at the bottom. The agent's own **Name** field can be
+anything you like (e.g. `my-omnigrid-agent`) -- it only labels the agent
+in your session list, it doesn't affect the tool connection. What matters
+is the **+ Add server** button: clicking it opens a server-name field
+(use `omnigrid`), a transport dropdown (defaults to **stdio**), then
+command/args/environment fields for that transport. Those stdio fields
+map directly onto this repo's local MCP server -- confirmed, not a guess:
 
 ```
 server-name:  omnigrid
@@ -181,11 +184,17 @@ Or add it directly to `.mcp.json` (project scope, shareable via git) or
 <summary><img src="https://img.shields.io/badge/-Claude_Desktop-D97757?style=flat-square&logo=claude&logoColor=white" align="absmiddle"></summary>
 
 Remote MCP servers are added through the UI, not a config file:
-**Settings &rarr; Connectors &rarr; Add custom connector**, URL
-`https://chanza.ai/mcp.php`, then open **Request headers** and add
-`Authorization: Bearer your-api-key`. (Team/Enterprise: an org owner adds
-it once under **Organization settings &rarr; Connectors**, everyone else
-just connects.)
+**Settings &rarr; Connectors &rarr; Add custom connector**. Fill in:
+
+- **Name**: `omnigrid` (any name works -- this just labels the tool in chat)
+- **URL**: `https://chanza.ai/mcp.php`
+- Open **Request headers** and add `Authorization: Bearer your-api-key`
+
+(Team/Enterprise: an org owner adds it once under **Organization settings
+&rarr; Connectors**, everyone else just connects.) Confirmed working
+end-to-end this way -- `list_models` and `offload_vlm_generate` (text and
+image) both verified live against `chanza.ai/mcp.php` through a connector
+configured exactly like this.
 
 Note: Anthropic's own docs describe custom request-header auth as a beta
 feature being rolled out gradually -- if you don't see that option yet,
@@ -331,6 +340,16 @@ Swap `<model-name>` for whatever `list_models` actually returns first.
 is involved** -- `offload_llm_generate` is text-only and has no field for
 an image at all, so asking for it by name on an image prompt just silently
 drops the picture.
+
+**Only sharing (or only consuming) the free NVIDIA vision-language relay,
+with no `agent.py` client process running?** `offload_llm_generate` and
+`offload_vlm_generate` both respond right away for an NVIDIA-hosted model --
+the backoffice detects it's config-only and relays to NVIDIA synchronously
+either way (text-only through `offload_llm_generate`, since that path has
+no image field or `temperature`/`system` support against NVIDIA). Only
+`offload_tensor_op` needs an actual CPU/RAM/GPU provider online to ever
+finish; without one it just returns a `job_id` that stays `queued` forever
+in `check_job_result`. Confirmed against the live network on both counts.
 
 For the image-plus-text row, whether the image data actually reaches the
 tool call depends on whether your harness bridges attached images into MCP

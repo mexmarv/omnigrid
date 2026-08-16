@@ -196,24 +196,42 @@ switch ($method) {
         }
 
         if ($name === 'offload_llm_generate') {
-            $payload = [
-                'prompt' => $args['prompt'] ?? '',
-                'max_tokens' => (int)($args['max_tokens'] ?? 256),
-                'temperature' => (float)($args['temperature'] ?? 0.7),
-            ];
-            if (!empty($args['system'])) {
-                $payload['system'] = $args['system'];
-            }
-            $payloadB64 = base64_encode(json_encode($payload));
             $modelName = $args['model_name'] ?? '';
-            $job = submit_job_and_wait($pdo, (int)$account['id'], "llm_infer:$modelName", $payloadB64,
-                                        1.0, 1024, 300, INITIAL_WAIT_S);
-            if ($job['status'] === 'done') {
-                tool_result_from_job($id, $job);
-            } elseif ($job['status'] === 'timeout') {
-                tool_pending_result($id, $job['job_id']);
+            $nvidiaModels = nvidia_hosted_models();
+
+            if (isset($nvidiaModels[$modelName])) {
+                // NVIDIA-hosted models only ever run through the vision-language relay --
+                // force text-only generation through that same synchronous path instead of
+                // queuing for a CPU/GPU provider that will never exist under this model name.
+                // (temperature/system aren't supported on this path, same as offload_vlm_generate.)
+                try {
+                    $text = call_nvidia_vlm(
+                        $nvidiaModels[$modelName]['model_id'], $nvidiaModels[$modelName]['api_key'],
+                        $args['prompt'] ?? '', null, 'image/jpeg', (int)($args['max_tokens'] ?? 256)
+                    );
+                    tool_text_result($id, $text, ['status' => 'done', 'text' => $text]);
+                } catch (Throwable $ex) {
+                    tool_error($id, $ex->getMessage());
+                }
             } else {
-                tool_error($id, $job['error'] ?? 'Job failed.');
+                $payload = [
+                    'prompt' => $args['prompt'] ?? '',
+                    'max_tokens' => (int)($args['max_tokens'] ?? 256),
+                    'temperature' => (float)($args['temperature'] ?? 0.7),
+                ];
+                if (!empty($args['system'])) {
+                    $payload['system'] = $args['system'];
+                }
+                $payloadB64 = base64_encode(json_encode($payload));
+                $job = submit_job_and_wait($pdo, (int)$account['id'], "llm_infer:$modelName", $payloadB64,
+                                            1.0, 1024, 300, INITIAL_WAIT_S);
+                if ($job['status'] === 'done') {
+                    tool_result_from_job($id, $job);
+                } elseif ($job['status'] === 'timeout') {
+                    tool_pending_result($id, $job['job_id']);
+                } else {
+                    tool_error($id, $job['error'] ?? 'Job failed.');
+                }
             }
         } elseif ($name === 'offload_vlm_generate') {
             $modelName = $args['model_name'] ?? '';
@@ -230,7 +248,11 @@ switch ($method) {
                         $args['image_mime'] ?? 'image/jpeg', (int)($args['max_tokens'] ?? 512)
                     );
                     tool_text_result($id, $text, ['status' => 'done', 'text' => $text]);
-                } catch (RuntimeException $ex) {
+                } catch (Throwable $ex) {
+                    // Catches more than call_nvidia_vlm's own RuntimeException -- a
+                    // misconfigured nvidia_models entry (missing/null api_key or model_id)
+                    // throws a TypeError here, which used to escape as a raw 500 instead
+                    // of a clean tool error.
                     tool_error($id, $ex->getMessage());
                 }
             } else {
