@@ -163,6 +163,15 @@ function dashboard_snapshot(PDO $pdo): array {
         "COALESCE(SUM(compute_seconds), 0) AS secs FROM jobs"
     )->fetch();
 
+    // Multimodal (currently: image) jobs -- vlm_infer:<model>. Each one is
+    // base64-decoded/encoded in that request's own PHP process memory and
+    // discarded when the request ends, same as any other job; this is just
+    // a visible count of how many have gone through that path.
+    $multimodal = $pdo->query(
+        "SELECT COUNT(*) AS total, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done " .
+        "FROM jobs WHERE task_type LIKE 'vlm_infer:%'"
+    )->fetch();
+
     $leaderboard = $pdo->query('SELECT name, credits FROM accounts ORDER BY credits DESC LIMIT 10')->fetchAll();
 
     $recentActivity = $pdo->query(
@@ -179,6 +188,8 @@ function dashboard_snapshot(PDO $pdo): array {
         'jobs_total' => (int)($jobs['total'] ?? 0),
         'jobs_done' => (int)($jobs['done'] ?? 0),
         'compute_hours_donated' => round((float)($jobs['secs'] ?? 0) / 3600, 3),
+        'multimodal_jobs_total' => (int)($multimodal['total'] ?? 0),
+        'multimodal_jobs_done' => (int)($multimodal['done'] ?? 0),
         'leaderboard' => array_map(fn($r) => ['name' => $r['name'], 'credits' => (float)$r['credits']], $leaderboard),
         'recent_activity' => array_map(fn($r) => [
             'task_type' => $r['task_type'],

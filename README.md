@@ -460,6 +460,16 @@ shell or a way to run arbitrary code -- these four operations, and
 whatever a provider's own machine decides to do with the data it's handed,
 are the entire vocabulary of the network.
 
+**If you just paste/attach an image straight into a chat with your AI
+agent, `offload_vlm_generate` won't pick it up on its own.** MCP tool
+arguments are JSON, so `image_b64` has to be an actual base64 string the
+agent puts there -- and an agent has no way to read the raw bytes of an
+image that only exists in the chat itself, only ones it can open as a
+file (from disk, a download, etc.). In practice that means: save the
+image somewhere the agent's tools can read it first, then either have it
+base64-encode that file into `offload_vlm_generate`, or (better, see
+below) upload it directly.
+
 Sending an image through an MCP tool call means embedding it as a base64
 string in the tool's JSON arguments -- fine for a small image, unwieldy
 for anything bigger. `jobs_submit_image.php` skips that entirely: upload

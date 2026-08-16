@@ -79,7 +79,7 @@ function friendly_task_type(string $taskType): string {
   h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.02em; }
   .tagline { color: var(--muted); margin: 0; font-size: 15.5px; max-width: 60ch; line-height: 1.55; }
 
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 36px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 36px; }
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
     padding: 20px 22px; transition: border-color .15s, transform .15s;
@@ -93,6 +93,7 @@ function friendly_task_type(string $taskType): string {
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   .stat-card .label { color: var(--muted); font-size: 13px; }
+  .stat-card .caption { color: var(--muted); font-size: 11.5px; opacity: 0.75; line-height: 1.4; margin-top: -4px; }
 
   h2 {
     font-size: 13px; color: var(--muted); font-weight: 700; text-transform: uppercase;
@@ -109,6 +110,7 @@ function friendly_task_type(string $taskType): string {
   }
 
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .stats { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } .stats { grid-template-columns: 1fr; } }
 
   .rank-row {
@@ -188,6 +190,12 @@ function friendly_task_type(string $taskType): string {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 6L9 17l-5-5"/></svg>
       <div class="value" id="stat-jobs"><?= $s['jobs_done'] ?> / <?= $s['jobs_total'] ?></div>
       <div class="label">jobs completed</div>
+    </div>
+    <div class="card stat-card" title="Received as a file upload or a base64 field, decoded/re-encoded in that one request's own PHP memory, queued, and released when the request ends -- nothing is written to disk beyond the job's own record.">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>
+      <div class="value" id="stat-multimodal"><?= $s['multimodal_jobs_done'] ?> / <?= $s['multimodal_jobs_total'] ?></div>
+      <div class="label">multimodal (image) jobs processed</div>
+      <div class="caption">upload &rarr; base64 in RAM &rarr; sent to model &rarr; discarded</div>
     </div>
   </div>
 
@@ -294,6 +302,7 @@ async function refreshStats() {
     document.getElementById('stat-online').textContent = s.providers_online;
     document.getElementById('stat-hours').textContent = s.compute_hours_donated;
     document.getElementById('stat-jobs').textContent = s.jobs_done + ' / ' + s.jobs_total;
+    document.getElementById('stat-multimodal').textContent = s.multimodal_jobs_done + ' / ' + s.multimodal_jobs_total;
     // Leaderboard, sharing block, and activity feed refresh on next full page
     // load -- keeping this lightweight avoids rebuilding DOM structures (and
     // their event state) on every poll for data that rarely changes second to second.
