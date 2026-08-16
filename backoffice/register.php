@@ -47,14 +47,14 @@ $hub = hub_base_url();
 <style>
   :root {
     --bg: #0b0e14; --panel: #121722; --panel-2: #171d2b; --border: #232b3d;
-    --text: #e7ecf5; --muted: #8b96ad; --accent: #6ee7c8; --accent-2: #7aa2ff; --danger: #ff8080;
+    --text: #e7ecf5; --muted: #9a94b3; --accent: #c084fc; --accent-2: #e879f9; --danger: #ff8080;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-image: radial-gradient(circle at 15% 0%, rgba(122,162,255,0.12), transparent 40%),
-                       radial-gradient(circle at 85% 20%, rgba(110,231,200,0.10), transparent 40%);
+    background-image: radial-gradient(circle at 15% 0%, rgba(232,121,249,0.12), transparent 40%),
+                       radial-gradient(circle at 85% 20%, rgba(192,132,252,0.10), transparent 40%);
   }
   .wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
   a.back { color: var(--muted); font-size: 13.5px; text-decoration: none; }
@@ -152,7 +152,7 @@ considered intelligent.</code></pre>
     <p class="sub" style="margin:20px 0 6px; font-size:13px;">
       Prefer hand-editing an agent file yourself, or using a client with an
       actual config file (Claude Code, Cursor, Codex CLI -- see the
-      <a href="https://github.com/mexmarv/omnigrid#wire-it-up" style="color:var(--accent-2)">full walkthrough</a>
+      <a href="https://github.com/mexmarv/omnigrid#use-it-right-now" style="color:var(--accent-2)">full walkthrough</a>
       for each)? Here's the equivalent YAML:
     </p>
     <pre class="copyable"><code>tools:

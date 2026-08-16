@@ -25,15 +25,15 @@ function friendly_task_type(string $taskType): string {
 <style>
   :root {
     --bg: #0a0d13; --panel: #121722; --panel-2: #171d2b; --border: #232b3d;
-    --text: #e7ecf5; --muted: #8b96ad; --accent: #6ee7c8; --accent-2: #7aa2ff;
+    --text: #e7ecf5; --muted: #9a94b3; --accent: #c084fc; --accent-2: #e879f9;
     --gold: #f5c453; --silver: #c9d2e0; --bronze: #d18b5c;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-image: radial-gradient(circle at 12% -10%, rgba(122,162,255,0.14), transparent 42%),
-                       radial-gradient(circle at 90% 10%, rgba(110,231,200,0.11), transparent 40%);
+    background-image: radial-gradient(circle at 12% -10%, rgba(232,121,249,0.14), transparent 42%),
+                       radial-gradient(circle at 90% 10%, rgba(192,132,252,0.11), transparent 40%);
     background-attachment: fixed;
   }
   a { color: inherit; }
@@ -64,7 +64,7 @@ function friendly_task_type(string $taskType): string {
   .hero { margin-bottom: 40px; }
   .live {
     display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--accent);
-    background: rgba(110,231,200,0.08); border: 1px solid rgba(110,231,200,0.25);
+    background: rgba(192,132,252,0.08); border: 1px solid rgba(192,132,252,0.25);
     padding: 5px 12px; border-radius: 999px; margin-bottom: 16px;
   }
   .live .dot {

@@ -1,14 +1,11 @@
 <p align="center">
-  <img src="docs/logo.png" alt="Omnigrid" width="120">
+  <img src="docs/banner.svg" alt="Omnigrid -- spare compute, shared like a signal, not sold like a service" width="820">
 </p>
-
-<h1 align="center">Omnigrid</h1>
-<p align="center"><b>Spare compute, shared like a signal -- not sold like a service.</b></p>
 
 <p align="center">
   <a href="https://chanza.ai"><b>Live network &amp; dashboard</b></a> ·
   <a href="https://chanza.ai/register.php">Get an API key</a> ·
-  <a href="#works-with-omnigent">Works with Omnigent</a> ·
+  <a href="#use-it-right-now">Use it right now</a> ·
   <a href="backoffice/HOSTING.md">Self-host it</a>
 </p>
 
@@ -28,190 +25,10 @@ work for someone else's agent. Need more than your own machine has? Reach
 into the same pool. No cloud bill, no plan tiers, no signup form --
 installing the client *is* the account.
 
-## The one rule everything else follows
+## Use it right now
 
-**Nothing here ever runs code that someone else sends you.** A machine
-sharing its compute only ever runs its own small set of fixed, pre-installed
-functions (matrix ops, ONNX model inference, LLM text generation) on
-*data* that arrives over the wire -- never a script, a shell command, or a
-container image supplied by whoever's asking. That single rule is what
-makes it safe to let a stranger's request run on your laptop at all, and
-it's why there's no Docker, no VM, no sandboxing arms race anywhere in
-this project: there's no untrusted code to contain in the first place.
-
-```mermaid
-flowchart LR
-    subgraph Share["Share compute"]
-        P1["Idle laptop\n(CPU/RAM)"]
-        P2["GPU machine\n+ hosted model"]
-    end
-
-    subgraph HQ["Backoffice -- chanza.ai"]
-        B[("Directory +\nmatchmaking +\ncredit ledger")]
-    end
-
-    subgraph Use["Use compute"]
-        C1["Your Python script"]
-        C2["Omnigent agent\n(via MCP)"]
-    end
-
-    P1 -- "announce capacity" --> B
-    P2 -- "announce capacity" --> B
-    C1 -- "submit job (data only)" --> B
-    C2 -- "submit job (data only)" --> B
-    B -- "assign job" --> P1
-    B -- "assign job" --> P2
-    P1 -- "result" --> B
-    P2 -- "result" --> B
-    B -- "result" --> C1
-    B -- "result" --> C2
-```
-
-## What you can share
-
-Three resources, all optional, all combinable on one machine:
-
-| Resource | What runs on it | How it's used |
-|---|---|---|
-| **CPU + RAM** | `tensor_op` (matmul/add/multiply/relu/sum/mean), `onnx_infer` (any supplied ONNX model) | Baseline -- every provider offers this, no GPU required. |
-| **GPU** | `onnx_infer` and `llm_infer` | Detected automatically and used without extra config -- see below. Not yet wired up for `tensor_op` (still plain CPU numpy there; honest gap, not a hidden one). |
-| **An LLM you already have** (any GGUF file -- Llama, Mistral, Qwen, whatever) | `llm_infer` | You host one specific model under a name of your choosing; only prompts and generation params ever cross the wire, never the model itself. |
-
-**How the GPU actually gets used**, concretely:
-- `onnx_infer` tries execution providers in order -- **CoreML** (Apple Silicon), then **CUDA** (NVIDIA), then falls back to plain CPU if neither is compiled into the installed `onnxruntime`. This applies automatically to any ONNX job your machine picks up, no flag needed.
-- `llm_infer` passes `n_gpu_layers` to `llama.cpp` -- `-1` (offload every layer) by default when a GPU is detected, override with `--gpu-layers` if you want partial offload to save VRAM for something else.
-- Verified for real on Apple Silicon: `llama.cpp`'s own device-init log confirms every layer actually lands on the Metal GPU, not just assumed from a flag being set. The CUDA path uses the identical mechanism but hasn't been run on real NVIDIA hardware here -- reports/contributions welcome if you test it.
-
-## What you actually get to call
-
-That's the supply side (what a provider offers). On the demand side, this
-is the entire menu -- every one of these is a live network call to
-whichever provider currently has that resource:
-
-| Operation | Python (`client_sdk`) | MCP tool (Omnigent/Claude/etc.) | Does what |
-|---|---|---|---|
-| List what's hosted | -- (check the dashboard) | `list_models` | Names of LLM models currently being shared for free. |
-| Generate text | `run_llm_infer(...)` | `offload_llm_generate` | Runs your prompt on a community-hosted model's CPU/GPU. |
-| Run a tensor op | `run_tensor_op(...)` | `offload_tensor_op` | matmul/add/multiply/relu/sum/mean on someone's spare CPU. |
-| Run an ONNX model | `run_onnx_infer(...)` | -- (Python only for now) | Runs a model *you* supply on someone else's CPU/GPU. |
-| Check a slow job | -- (handled for you) | `check_job_result` | Only needed if a job didn't finish immediately -- see below. |
-
-That's the whole surface area. Nothing here is a general-purpose remote
-shell or a way to run arbitrary code -- these four operations, and
-whatever a provider's own machine decides to do with the data it's handed,
-are the entire vocabulary of the network.
-
-## Share your compute
-
-Install the client, tell it how much you're willing to give away, and
-leave it running. It only picks up work while your machine looks idle.
-
-```bash
-git clone https://github.com/mexmarv/omnigrid.git
-cd omnigrid/client
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ram-mb 2048 \
-    --coordinator https://chanza.ai
-```
-
-Already have an API key from [chanza.ai/register.php](https://chanza.ai/register.php)?
-Skip `--name`/`--email` and pass `--api-key` directly instead.
-
-Have an open-weight GGUF model sitting around? Host it for text
-generation, GPU offload included automatically:
-
-```bash
-python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ram-mb 2048 \
-    --coordinator https://chanza.ai \
-    --llm-model-path /path/to/model.gguf --llm-model-name my-model
-```
-
-The first run registers you an account (50 free credits to start) and
-caches an API key at `~/.omnigrid/` -- no password, ever. Your email is
-only used by [reset.php](https://chanza.ai/reset.php) if you ever need to
-reissue a lost key or delete the account; back up `~/.omnigrid/` if you'd
-rather not rely on that. Every job you complete earns credits from
-whoever consumed it -- **bragging rights only, not a spendable balance.**
-Nothing anywhere checks your credit total before letting you submit a job;
-it's a leaderboard, not a currency, and nobody has to trust anybody
-either way -- the ledger just tracks who's given what.
-
-<details>
-<summary>What actually happens when a job runs (sequence diagram)</summary>
-
-```mermaid
-sequenceDiagram
-    participant Consumer
-    participant Backoffice as Backoffice (chanza.ai)
-    participant Provider
-
-    Provider->>Backoffice: announce capacity + installed handlers
-    Consumer->>Backoffice: submit job (task_type + data payload)
-    Backoffice-->>Consumer: job_id (queued)
-    Provider->>Backoffice: poll for next job
-    Backoffice-->>Provider: matching job (data payload)
-    Provider->>Provider: run fixed handler in sandboxed subprocess
-    Provider->>Backoffice: report result
-    Backoffice->>Backoffice: credit provider, debit consumer
-    Consumer->>Backoffice: poll job status
-    Backoffice-->>Consumer: result
-```
-</details>
-
-## Use the network from Python
-
-```python
-import client_sdk as cc
-import numpy as np
-
-result = cc.run_tensor_op("matmul", a, b, account_name="your name", email="you@example.com",
-                           coordinator="https://chanza.ai")
-
-text = cc.run_llm_infer("Explain BitTorrent in one sentence.",
-                         model_name="some-hosted-model", account_name="your name",
-                         email="you@example.com", coordinator="https://chanza.ai")
-
-# Already have a key from register.php? Skip account_name/email and pass api_key= instead.
-```
-
-Check `chanza.ai`'s dashboard (or your own backoffice's `/`) under "Being
-shared for free, right now" to see which model names are actually live
-before asking for one by name.
-
----
-
-## Works with Omnigent
-
-<p align="center">
-  <a href="https://github.com/omnigent-ai/omnigent"><img src="docs/omnigent-logo.svg" alt="Omnigent" width="90"></a>
-</p>
-
-[Omnigent](https://github.com/omnigent-ai/omnigent) is Databricks'
-open-source meta-harness -- one agent definition, any harness underneath
-(Claude Code, Codex, Cursor, and more). Omnigrid was built with Omnigent
-specifically in mind: point an Omnigent agent at the hosted MCP endpoint
-below and it can reach the whole community-shared network as a tool call,
-with nothing to install.
-
-```mermaid
-flowchart LR
-    A["Your Omnigent agent\n(Claude Code / Codex / Cursor / custom)"]
-    M["chanza.ai/mcp.php\n(hosted, no install)"]
-    B[("Omnigrid backoffice")]
-    N["Community providers"]
-
-    A -- "tools: omnigrid\n(url + API key)" --> M
-    M -- "offload_llm_generate /\noffload_tensor_op" --> B
-    B --> N
-```
-
-### Wire it up
-
-`backoffice/mcp.php` speaks plain MCP over Streamable HTTP -- it doesn't
-care which client is calling, so any MCP-aware tool works, not just
-Omnigent. Two steps apply no matter which one you pick:
+No installing anything to *consume* the network -- pick whatever you
+already use below. Two steps apply no matter which one you pick:
 
 **1. Get an account and API key.** Visit `https://chanza.ai/register.php`
 (or `http://127.0.0.1:8000/register.php` if you're running your own
@@ -229,13 +46,23 @@ that's what you ask for by name once it's wired up.
 <details>
 <summary><b>Omnigent</b> -- Databricks' open-source meta-harness</summary>
 
-Omnigent doesn't have a settings screen for adding tools -- it's chat-first.
-An agent *is* a YAML file underneath (a `prompt`, an `executor`, a `tools`
-section), but you don't go find that file and hand-edit it: you describe
-what you want in Omnigent's own "Describe a task to start a new
-session..." box, and it authors the config for you. So paste this in
-(swap in your real API key from [chanza.ai/register.php](https://chanza.ai/register.php) --
-that page also gives you this exact prompt pre-filled):
+Omnigent has an actual **Create custom agent** form -- Name, Description,
+Harness, Model, System instructions, and an **MCP Tools &rarr; + Add
+server** button at the bottom. Click that and point it at the server
+below. (We've seen this form directly but not yet the exact field labels
+inside that specific "Add server" sub-dialog -- whatever it asks for, the
+URL and Authorization header below are what it needs.)
+
+```
+URL:     https://chanza.ai/mcp.php
+Header:  Authorization: Bearer your-api-key
+```
+
+Prefer describing it instead of using the form? Omnigent is chat-first
+too -- paste this into its "Describe a task to start a new session..."
+box and it authors the config for you (swap in your real key from
+[chanza.ai/register.php](https://chanza.ai/register.php) -- that page
+gives you this exact prompt pre-filled):
 
 ```
 Set up a new agent with an MCP tool called "omnigrid" over HTTP, pointing
@@ -244,22 +71,16 @@ at https://chanza.ai/mcp.php, with an Authorization header set to
 offload_llm_generate, and offload_tensor_op through that tool.
 ```
 
-Then, once it's wired up, just ask for the shared resource in plain language --
-for generated text:
-
-> List the models available on Omnigrid, then use whichever one is hosted
-> to write a two-sentence summary of why octopuses are considered
-> intelligent.
-
-or for raw compute, no LLM involved:
-
-> Use the omnigrid tool to compute the matrix product of [[1, 2], [3, 4]]
-> and [[5, 6], [7, 8]].
-
-Prefer hand-editing the agent file yourself (or Omnigent handed you one
-you want to inspect/tweak)? Here's the equivalent YAML `tools:` block:
+Prefer hand-editing the agent file yourself? Here's the equivalent YAML:
 
 ```yaml
+name: my_agent
+prompt: |
+  You are a helpful assistant with access to the Omnigrid community
+  compute network via the omnigrid tool.
+executor:
+  harness: claude-sdk   # or codex, cursor, antigravity, etc. -- whatever you're using
+  model: your-model-here
 tools:
   omnigrid:
     type: mcp
@@ -366,9 +187,34 @@ please open an issue -- happy to add real instructions once there's a
 supported path.
 </details>
 
+<details>
+<summary><b>Python script or notebook</b></summary>
+
+```bash
+git clone https://github.com/mexmarv/omnigrid.git
+cd omnigrid/client
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+```python
+import client_sdk as cc
+import numpy as np
+
+result = cc.run_tensor_op("matmul", a, b, api_key="your-api-key",
+                           coordinator="https://chanza.ai")
+
+text = cc.run_llm_infer("Explain BitTorrent in one sentence.",
+                         model_name="some-hosted-model", api_key="your-api-key",
+                         coordinator="https://chanza.ai")
+
+# No key yet? Pass account_name="..." and email="..." instead of api_key=
+# and it registers automatically on first use.
+```
+</details>
+
 **4. Ask for the shared resource by name**, in plain language, in whichever
-client you just wired up -- these map to the tools in
-[What you actually get to call](#what-you-actually-get-to-call) above:
+client you just wired up:
 
 > List the models available on Omnigrid, then use whichever one is hosted
 > to write a two-sentence summary of why octopuses are considered
@@ -394,6 +240,138 @@ those on your machine, and this integration follows the same rule. It only
 ever reaches self-hosted, open-weight models someone chose to donate.
 
 ---
+
+## The one rule everything else follows
+
+**Nothing here ever runs code that someone else sends you.** A machine
+sharing its compute only ever runs its own small set of fixed, pre-installed
+functions (matrix ops, ONNX model inference, LLM text generation) on
+*data* that arrives over the wire -- never a script, a shell command, or a
+container image supplied by whoever's asking. That single rule is what
+makes it safe to let a stranger's request run on your laptop at all, and
+it's why there's no Docker, no VM, no sandboxing arms race anywhere in
+this project: there's no untrusted code to contain in the first place.
+
+```mermaid
+flowchart LR
+    subgraph Share["Share compute"]
+        P1["Idle laptop\n(CPU/RAM)"]
+        P2["GPU machine\n+ hosted model"]
+    end
+
+    subgraph HQ["Backoffice -- chanza.ai"]
+        B[("Directory +\nmatchmaking +\ncredit ledger")]
+    end
+
+    subgraph Use["Use compute"]
+        C1["Your Python script"]
+        C2["Omnigent agent\n(via MCP)"]
+    end
+
+    P1 -- "announce capacity" --> B
+    P2 -- "announce capacity" --> B
+    C1 -- "submit job (data only)" --> B
+    C2 -- "submit job (data only)" --> B
+    B -- "assign job" --> P1
+    B -- "assign job" --> P2
+    P1 -- "result" --> B
+    P2 -- "result" --> B
+    B -- "result" --> C1
+    B -- "result" --> C2
+```
+
+## What you can share
+
+Three resources, all optional, all combinable on one machine:
+
+| Resource | What runs on it | How it's used |
+|---|---|---|
+| **CPU + RAM** | `tensor_op` (matmul/add/multiply/relu/sum/mean), `onnx_infer` (any supplied ONNX model) | Baseline -- every provider offers this, no GPU required. |
+| **GPU** | `onnx_infer` and `llm_infer` | Detected automatically and used without extra config -- see below. Not yet wired up for `tensor_op` (still plain CPU numpy there; honest gap, not a hidden one). |
+| **An LLM you already have** (any GGUF file -- Llama, Mistral, Qwen, whatever) | `llm_infer` | You host one specific model under a name of your choosing; only prompts and generation params ever cross the wire, never the model itself. |
+
+**How the GPU actually gets used**, concretely:
+- `onnx_infer` tries execution providers in order -- **CoreML** (Apple Silicon), then **CUDA** (NVIDIA), then falls back to plain CPU if neither is compiled into the installed `onnxruntime`. This applies automatically to any ONNX job your machine picks up, no flag needed.
+- `llm_infer` passes `n_gpu_layers` to `llama.cpp` -- `-1` (offload every layer) by default when a GPU is detected, override with `--gpu-layers` if you want partial offload to save VRAM for something else.
+- Verified for real on Apple Silicon: `llama.cpp`'s own device-init log confirms every layer actually lands on the Metal GPU, not just assumed from a flag being set. The CUDA path uses the identical mechanism but hasn't been run on real NVIDIA hardware here -- reports/contributions welcome if you test it.
+
+## What you actually get to call
+
+That's the supply side (what a provider offers). On the demand side, this
+is the entire menu -- every one of these is a live network call to
+whichever provider currently has that resource:
+
+| Operation | Python (`client_sdk`) | MCP tool (Omnigent/Claude/etc.) | Does what |
+|---|---|---|---|
+| List what's hosted | -- (check the dashboard) | `list_models` | Names of LLM models currently being shared for free. |
+| Generate text | `run_llm_infer(...)` | `offload_llm_generate` | Runs your prompt on a community-hosted model's CPU/GPU. |
+| Run a tensor op | `run_tensor_op(...)` | `offload_tensor_op` | matmul/add/multiply/relu/sum/mean on someone's spare CPU. |
+| Run an ONNX model | `run_onnx_infer(...)` | -- (Python only for now) | Runs a model *you* supply on someone else's CPU/GPU. |
+| Check a slow job | -- (handled for you) | `check_job_result` | Only needed if a job didn't finish immediately -- see above. |
+
+That's the whole surface area. Nothing here is a general-purpose remote
+shell or a way to run arbitrary code -- these four operations, and
+whatever a provider's own machine decides to do with the data it's handed,
+are the entire vocabulary of the network.
+
+## Share your compute
+
+Install the client, tell it how much you're willing to give away, and
+leave it running. It only picks up work while your machine looks idle.
+
+```bash
+git clone https://github.com/mexmarv/omnigrid.git
+cd omnigrid/client
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ram-mb 2048 \
+    --coordinator https://chanza.ai
+```
+
+Already have an API key from [chanza.ai/register.php](https://chanza.ai/register.php)?
+Skip `--name`/`--email` and pass `--api-key` directly instead.
+
+Have an open-weight GGUF model sitting around? Host it for text
+generation, GPU offload included automatically:
+
+```bash
+python3 agent.py --name "your name" --email "you@example.com" --cpu-cores 2 --ram-mb 2048 \
+    --coordinator https://chanza.ai \
+    --llm-model-path /path/to/model.gguf --llm-model-name my-model
+```
+
+The first run registers you an account (50 free credits to start) and
+caches an API key at `~/.omnigrid/` -- no password, ever. Your email is
+only used by [reset.php](https://chanza.ai/reset.php) if you ever need to
+reissue a lost key or delete the account; back up `~/.omnigrid/` if you'd
+rather not rely on that. Every job you complete earns credits from
+whoever consumed it -- **bragging rights only, not a spendable balance.**
+Nothing anywhere checks your credit total before letting you submit a job;
+it's a leaderboard, not a currency, and nobody has to trust anybody
+either way -- the ledger just tracks who's given what.
+
+<details>
+<summary>What actually happens when a job runs (sequence diagram)</summary>
+
+```mermaid
+sequenceDiagram
+    participant Consumer
+    participant Backoffice as Backoffice (chanza.ai)
+    participant Provider
+
+    Provider->>Backoffice: announce capacity + installed handlers
+    Consumer->>Backoffice: submit job (task_type + data payload)
+    Backoffice-->>Consumer: job_id (queued)
+    Provider->>Backoffice: poll for next job
+    Backoffice-->>Provider: matching job (data payload)
+    Provider->>Provider: run fixed handler in sandboxed subprocess
+    Provider->>Backoffice: report result
+    Backoffice->>Backoffice: credit provider, debit consumer
+    Consumer->>Backoffice: poll job status
+    Backoffice-->>Consumer: result
+```
+</details>
 
 ## Self-host your own network instead of chanza.ai
 
