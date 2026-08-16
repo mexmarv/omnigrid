@@ -576,6 +576,14 @@ own persistent worker and its own `max_concurrency`. `api_key_env` (see
 a remote/shared Ollama instance sitting behind auth -- the default local
 setup above needs no key at all.
 
+Reasoning models (qwen3 and similar) are handled automatically: Ollama
+returns their chain-of-thought separately from the final answer, and by
+default requests ask Ollama to skip that reasoning phase entirely
+(`think: false`) so a small `max_output_tokens` budget doesn't get
+silently consumed by thinking instead of the actual reply. Nothing to
+configure for this -- it's a no-op for models that don't support
+reasoning at all.
+
 #### Alternative: a GGUF file via persistent llama.cpp
 
 Have a GGUF file instead of an Ollama tag? The pre-existing

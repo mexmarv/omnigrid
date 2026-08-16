@@ -347,3 +347,11 @@ surface.
 - **A job fails with a schema validation message** -- that's Phase 2
   working as intended: the message names exactly which bound was
   violated (role, message count, content size, context budget, etc.).
+- **An Ollama-backed job "succeeds" but returns empty text** -- seen live
+  testing `qwen3:8b`: reasoning-capable models return their
+  chain-of-thought in a separate `message.thinking` field, and a small
+  `max_output_tokens` budget gets consumed entirely by that reasoning,
+  leaving `message.content` (what `OllamaBackend` reads) empty.
+  `OllamaBackend` always sends `think: false` precisely to avoid this --
+  if you're still seeing empty output, confirm you're on the version of
+  `ollama_backend.py` that sets it (`git log -- client/inference/ollama_backend.py`).
