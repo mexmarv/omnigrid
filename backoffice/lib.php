@@ -106,7 +106,20 @@ function call_nvidia_vlm(string $modelId, string $apiKey, string $prompt,
         $detail = $data['error']['message'] ?? $body;
         throw new RuntimeException("NVIDIA API error ($status): $detail");
     }
-    return $data['choices'][0]['message']['content'];
+    $content = $data['choices'][0]['message']['content'] ?? null;
+    if ($content === null) {
+        // Reasoning models can burn the whole max_tokens budget on their
+        // internal reasoning before ever emitting a final answer, leaving
+        // content null -- that used to violate this function's `: string`
+        // return type and crash as an uncaught TypeError instead of a
+        // readable error.
+        $finishReason = $data['choices'][0]['finish_reason'] ?? 'unknown';
+        throw new RuntimeException(
+            "Model produced no final answer (finish_reason: $finishReason) -- " .
+            "it likely hit max_tokens while still reasoning. Try again with a higher max_tokens."
+        );
+    }
+    return $content;
 }
 
 /** task_type strings look like "llm_infer:<model-name>" or "vlm_infer:<model-name>" --
