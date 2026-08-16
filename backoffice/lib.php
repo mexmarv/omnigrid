@@ -79,6 +79,64 @@ function list_hosted_models(PDO $pdo): array {
     return $models;
 }
 
+/** Single source of truth for everything the dashboard shows -- used for both the
+ * initial page render (index.php) and the live JS auto-refresh (api/stats.php),
+ * so the two can never silently drift out of sync with each other. */
+function dashboard_snapshot(PDO $pdo): array {
+    $cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;
+    $stmt = $pdo->prepare('SELECT cpu_cores, ram_mb, gpu_model, task_types FROM providers WHERE last_heartbeat >= ?');
+    $stmt->execute([$cutoff]);
+    $onlineProviders = $stmt->fetchAll();
+
+    $totalCores = 0.0;
+    $totalRamMb = 0;
+    $gpuProviders = 0;
+    $hostedModels = [];
+    foreach ($onlineProviders as $p) {
+        $totalCores += (float)$p['cpu_cores'];
+        $totalRamMb += (int)$p['ram_mb'];
+        if (!empty($p['gpu_model'])) {
+            $gpuProviders++;
+        }
+        foreach (explode(',', $p['task_types']) as $taskType) {
+            if (str_starts_with($taskType, 'llm_infer:')) {
+                $hostedModels[] = substr($taskType, strlen('llm_infer:'));
+            }
+        }
+    }
+    $hostedModels = array_values(array_unique($hostedModels));
+    sort($hostedModels);
+
+    $jobs = $pdo->query(
+        "SELECT COUNT(*) AS total, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done, " .
+        "COALESCE(SUM(compute_seconds), 0) AS secs FROM jobs"
+    )->fetch();
+
+    $leaderboard = $pdo->query('SELECT name, credits FROM accounts ORDER BY credits DESC LIMIT 10')->fetchAll();
+
+    $recentActivity = $pdo->query(
+        "SELECT task_type, compute_seconds, finished_at FROM jobs " .
+        "WHERE status = 'done' ORDER BY finished_at DESC LIMIT 6"
+    )->fetchAll();
+
+    return [
+        'providers_online' => count($onlineProviders),
+        'total_cores' => $totalCores,
+        'total_ram_mb' => $totalRamMb,
+        'gpu_providers' => $gpuProviders,
+        'hosted_models' => $hostedModels,
+        'jobs_total' => (int)($jobs['total'] ?? 0),
+        'jobs_done' => (int)($jobs['done'] ?? 0),
+        'compute_hours_donated' => round((float)($jobs['secs'] ?? 0) / 3600, 3),
+        'leaderboard' => array_map(fn($r) => ['name' => $r['name'], 'credits' => (float)$r['credits']], $leaderboard),
+        'recent_activity' => array_map(fn($r) => [
+            'task_type' => $r['task_type'],
+            'compute_seconds' => (float)$r['compute_seconds'],
+            'finished_at' => (float)$r['finished_at'],
+        ], $recentActivity),
+    ];
+}
+
 /** Inserts a queued job and blocks (server-side poll loop) until it's done/failed or
  * $maxWaitS elapses. Used by mcp.php, where a single HTTP request must synchronously
  * return a result -- there's no separate client-side poll step like client_sdk.py has. */
@@ -219,7 +277,8 @@ function request_password_reset(PDO $pdo, string $name, string $email, string $b
     $body = "Someone (hopefully you) asked to manage the Omnigrid account '$name'.\n\n" .
         "Reset your API key or delete the account here (link expires in 1 hour):\n$link\n\n" .
         "If this wasn't you, ignore this email -- nothing happens without clicking the link.";
-    @mail($email, 'Omnigrid account access', $body, "From: no-reply@" . parse_url($baseUrl, PHP_URL_HOST));
+    $from = omnigrid_config()['mail_from'] ?? ('no-reply@' . parse_url($baseUrl, PHP_URL_HOST));
+    @mail($email, 'Omnigrid account access', $body, "From: $from");
 }
 
 /** Returns the account row for a valid, unexpired reset token, or null. */

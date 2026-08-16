@@ -128,10 +128,31 @@ $hub = hub_base_url();
 
     <h2>Configure Omnigent</h2>
     <p class="sub" style="margin-bottom:12px;">
-      Nothing to install -- add this to your agent's YAML under <code>tools:</code>
-      and it points straight at the hosted MCP endpoint. See the
-      <a href="https://github.com/mexmarv/omnigrid#use-the-network" style="color:var(--accent-2)">full walkthrough</a>
-      for what to actually type into the chat once it's wired up.
+      Omnigent doesn't have a settings screen for this -- it's chat-first.
+      Paste this into its "Describe a task to start a new session..." box
+      and it writes the agent config for you:
+    </p>
+    <pre id="omnigent-prompt"><code>Set up a new agent with an MCP tool called "omnigrid" over HTTP, pointing
+at <?= e($hub) ?>/mcp.php, with an Authorization header set to
+"Bearer <?= e($result['api_key']) ?>". It should be able to call
+list_models, offload_llm_generate, and offload_tensor_op through that tool.</code></pre>
+    <button type="button" onclick="copyBlock('omnigent-prompt', this)"
+            style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); font-size:13px; padding:8px 14px; margin-bottom:16px;">
+      Copy prompt
+    </button>
+
+    <p class="sub" style="margin:0 0 12px; font-size:13.5px;">
+      Then, once it's wired up, just ask for it in plain language:
+    </p>
+    <pre><code>List the models available on Omnigrid, then use whichever one is
+hosted to write a two-sentence summary of why octopuses are
+considered intelligent.</code></pre>
+
+    <p class="sub" style="margin:20px 0 6px; font-size:13px;">
+      Prefer hand-editing an agent file yourself, or using a client with an
+      actual config file (Claude Code, Cursor, Codex CLI -- see the
+      <a href="https://github.com/mexmarv/omnigrid#wire-it-up" style="color:var(--accent-2)">full walkthrough</a>
+      for each)? Here's the equivalent YAML:
     </p>
     <pre><code>tools:
   omnigrid:
@@ -164,5 +185,15 @@ text = cc.run_llm_infer("hello!", model_name="&lt;see dashboard for hosted model
                          api_key="<?= e($result['api_key']) ?>", coordinator="<?= e($hub) ?>")</code></pre>
   <?php endif; ?>
 </div>
+<script>
+function copyBlock(id, btn) {
+  const text = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(text).then(function () {
+    const original = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function () { btn.textContent = original; }, 1500);
+  });
+}
+</script>
 </body>
 </html>

@@ -4,12 +4,11 @@
  * simple, no separate service) or MySQL, picked by the DSN in config.php.
  */
 
-function omnigrid_db(): PDO {
-    static $pdo = null;
-    if ($pdo !== null) {
-        return $pdo;
+function omnigrid_config(): array {
+    static $config = null;
+    if ($config !== null) {
+        return $config;
     }
-
     $configPath = __DIR__ . '/config.php';
     if (!file_exists($configPath)) {
         http_response_code(500);
@@ -18,6 +17,16 @@ function omnigrid_db(): PDO {
         exit;
     }
     $config = require $configPath;
+    return $config;
+}
+
+function omnigrid_db(): PDO {
+    static $pdo = null;
+    if ($pdo !== null) {
+        return $pdo;
+    }
+
+    $config = omnigrid_config();
 
     if (str_starts_with($config['dsn'], 'sqlite:')) {
         $sqlitePath = substr($config['dsn'], strlen('sqlite:'));

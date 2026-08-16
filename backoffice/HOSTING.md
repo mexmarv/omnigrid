@@ -70,6 +70,12 @@ the steps won't.
 3. **Copy `config.example.php` to `config.php`.** SQLite is the default --
    nothing to fill in. Only switch to the commented-out MySQL block if you
    specifically want a managed database (see below).
+   - **Email (for `reset.php`)**: set `'mail_from'` in `config.php` to an
+     address on your own domain -- ideally one you already have a real
+     mailbox for in hPanel's Email section (e.g. `no-reply@chanza.ai`).
+     Sends via PHP's built-in `mail()`; using your own domain's address
+     delivers more reliably than a made-up one, since your domain's mail
+     already has SPF/DKIM set up through Hostinger.
 4. **Turn on TLS.** Hostinger shared plans normally offer free AutoSSL /
    Let's Encrypt directly in hPanel for any domain pointed at your account.
    Don't run this over plain HTTP in production -- API keys travel in the

@@ -1,40 +1,20 @@
 <?php
 require_once __DIR__ . '/lib.php';
 $pdo = omnigrid_db();
-
-$cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;
-$stmt = $pdo->prepare('SELECT cpu_cores, ram_mb, gpu_model, task_types FROM providers WHERE last_heartbeat >= ?');
-$stmt->execute([$cutoff]);
-$onlineProviders = $stmt->fetchAll();
-
-$online = count($onlineProviders);
-$totalCores = 0.0;
-$totalRamMb = 0;
-$gpuProviders = 0;
-$hostedModels = [];
-foreach ($onlineProviders as $p) {
-    $totalCores += (float)$p['cpu_cores'];
-    $totalRamMb += (int)$p['ram_mb'];
-    if (!empty($p['gpu_model'])) {
-        $gpuProviders++;
-    }
-    foreach (explode(',', $p['task_types']) as $taskType) {
-        if (str_starts_with($taskType, 'llm_infer:')) {
-            $hostedModels[] = substr($taskType, strlen('llm_infer:'));
-        }
-    }
-}
-$hostedModels = array_values(array_unique($hostedModels));
-sort($hostedModels);
-
-$jobs = $pdo->query(
-    "SELECT COUNT(*) AS total, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done, " .
-    "COALESCE(SUM(compute_seconds), 0) AS secs FROM jobs"
-)->fetch();
-$computeHours = round((float)($jobs['secs'] ?? 0) / 3600, 2);
-$leaderboard = $pdo->query('SELECT name, credits FROM accounts ORDER BY credits DESC LIMIT 10')->fetchAll();
+$s = dashboard_snapshot($pdo);
 
 function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
+
+function friendly_task_type(string $taskType): string {
+    if (str_starts_with($taskType, 'llm_infer:')) {
+        return 'Text generation (' . substr($taskType, strlen('llm_infer:')) . ')';
+    }
+    return match ($taskType) {
+        'tensor_op' => 'Tensor operation',
+        'onnx_infer' => 'ONNX inference',
+        default => $taskType,
+    };
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -44,117 +24,274 @@ function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 <title>Omnigrid -- community compute for AI agents</title>
 <style>
   :root {
-    --bg: #0b0e14; --panel: #121722; --panel-2: #171d2b; --border: #232b3d;
+    --bg: #0a0d13; --panel: #121722; --panel-2: #171d2b; --border: #232b3d;
     --text: #e7ecf5; --muted: #8b96ad; --accent: #6ee7c8; --accent-2: #7aa2ff;
+    --gold: #f5c453; --silver: #c9d2e0; --bronze: #d18b5c;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-image: radial-gradient(circle at 15% 0%, rgba(122,162,255,0.12), transparent 40%),
-                       radial-gradient(circle at 85% 20%, rgba(110,231,200,0.10), transparent 40%);
+    background-image: radial-gradient(circle at 12% -10%, rgba(122,162,255,0.14), transparent 42%),
+                       radial-gradient(circle at 90% 10%, rgba(110,231,200,0.11), transparent 40%);
+    background-attachment: fixed;
   }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 80px; }
-  .logo { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
-  .logo img { width: 48px; height: 48px; border-radius: 12px; }
-  h1 { font-size: 28px; margin: 0; letter-spacing: -0.02em; }
+  a { color: inherit; }
+
+  nav {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    gap: 10px 16px; padding: 16px 28px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: rgba(10,13,19,0.85); backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+  nav .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  nav .brand img { width: 28px; height: 28px; border-radius: 8px; }
+  nav .brand span { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  nav .links { display: flex; align-items: center; gap: 18px; font-size: 13.5px; flex-wrap: wrap; }
+  nav .links a { color: var(--muted); text-decoration: none; white-space: nowrap; }
+  nav .links a:hover { color: var(--text); }
+  nav .links a.cta {
+    color: #06110d; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    padding: 7px 14px; border-radius: 8px; font-weight: 600;
+  }
+  @media (max-width: 560px) {
+    nav .links a:not(.cta) { display: none; }
+    nav .links { gap: 10px; }
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  .hero { margin-bottom: 40px; }
+  .live {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--accent);
+    background: rgba(110,231,200,0.08); border: 1px solid rgba(110,231,200,0.25);
+    padding: 5px 12px; border-radius: 999px; margin-bottom: 16px;
+  }
+  .live .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .tagline { color: var(--muted); margin: 0; font-size: 15.5px; max-width: 60ch; line-height: 1.55; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 36px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px 22px; transition: border-color .15s, transform .15s;
+  }
+  .card:hover { border-color: #2c3752; }
+  .stat-card { display: flex; flex-direction: column; gap: 10px; }
+  .stat-card svg { width: 18px; height: 18px; color: var(--muted); }
+  .stat-card .value {
+    font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .stat-card .label { color: var(--muted); font-size: 13px; }
+
+  h2 {
+    font-size: 13px; color: var(--muted); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; margin: 0 0 14px;
+  }
+  .section { margin-bottom: 36px; }
+  .subnote { color: var(--muted); font-size: 12.5px; margin: -8px 0 14px; }
+
   .tags { display: flex; flex-wrap: wrap; gap: 8px; }
   .tag {
     display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: 13px;
     font-family: ui-monospace, SFMono-Regular, monospace;
     background: var(--panel-2); border: 1px solid var(--border); color: var(--accent);
   }
-  .tagline { color: var(--muted); margin: 6px 0 40px; font-size: 15px; }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 40px; }
-  .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-    padding: 18px 20px;
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } .stats { grid-template-columns: 1fr; } }
+
+  .rank-row {
+    display: flex; align-items: center; gap: 12px; padding: 11px 16px;
+    border-bottom: 1px solid var(--border); font-size: 14px;
   }
-  .card .value {
-    font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+  .rank-row:last-child { border-bottom: none; }
+  .rank-badge {
+    width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 11.5px; font-weight: 700; flex-shrink: 0;
+    background: var(--panel-2); color: var(--muted);
   }
-  .card .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  h2 { font-size: 16px; color: var(--muted); font-weight: 600; text-transform: uppercase;
-       letter-spacing: 0.06em; margin: 36px 0 14px; }
-  table { width: 100%; border-collapse: collapse; background: var(--panel);
-          border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
-  th, td { text-align: left; padding: 12px 18px; font-size: 14px; }
-  th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
-  tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
-  .empty { color: var(--muted); padding: 24px 18px; font-size: 14px; }
-  .cta {
-    margin-top: 48px; padding: 24px; border-radius: 14px;
-    background: var(--panel-2); border: 1px solid var(--border);
+  .rank-badge.gold { background: linear-gradient(135deg, var(--gold), #c9922b); color: #2a1c00; }
+  .rank-badge.silver { background: linear-gradient(135deg, var(--silver), #8b97ab); color: #10131a; }
+  .rank-badge.bronze { background: linear-gradient(135deg, var(--bronze), #9c5a30); color: #200f00; }
+  .rank-row .name { flex: 1; }
+  .rank-row .credits { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+
+  .activity-row { padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-row .when { color: var(--muted); font-size: 12px; }
+
+  .empty { color: var(--muted); padding: 20px 16px; font-size: 14px; }
+  .cta-panel {
+    padding: 26px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--border);
   }
-  .cta p { margin: 0 0 14px; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
-  .cta a {
+  .cta-panel p { margin: 0 0 14px; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+  .cta-panel a.btn {
     display: inline-block; padding: 10px 18px; border-radius: 10px; font-weight: 600;
     text-decoration: none; background: linear-gradient(135deg, var(--accent), var(--accent-2));
     color: #06110d; font-size: 14px;
   }
-  code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
-         padding: 2px 6px; font-size: 13px; }
-  footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
-  footer a { color: var(--accent-2); }
+
+  footer {
+    margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 13px; display: flex; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+  }
+  footer a { color: var(--accent-2); text-decoration: none; }
 </style>
 </head>
 <body>
+
+<nav>
+  <a class="brand" href="index.php"><img src="assets/logo.png" alt=""><span>Omnigrid</span></a>
+  <div class="links">
+    <a href="register.php">Get an API key</a>
+    <a href="reset.php">Reset access</a>
+    <a href="https://github.com/mexmarv/omnigrid">GitHub</a>
+    <a class="cta" href="register.php">Share compute &rarr;</a>
+  </div>
+</nav>
+
 <div class="wrap">
-  <div class="logo"><img src="assets/logo.png" alt="Omnigrid"><h1>Omnigrid</h1></div>
-  <p class="tagline">Community-run spare CPU/RAM/GPU, and open-model LLM inference --
-     shared, not sold. This page is the live backoffice for chanza.ai's hub.</p>
+  <div class="hero">
+    <div class="live"><span class="dot"></span> live network</div>
+    <h1>Community compute for AI agents</h1>
+    <p class="tagline">Spare CPU/RAM/GPU and open-model LLM inference, shared not sold.
+       Every number on this page is real and updates automatically -- nothing here is a mockup.</p>
+  </div>
 
   <div class="stats">
-    <div class="card"><div class="value"><?= $online ?></div><div class="label">providers online</div></div>
-    <div class="card"><div class="value"><?= $computeHours ?></div><div class="label">compute-hours donated</div></div>
-    <div class="card"><div class="value"><?= (int)($jobs['done'] ?? 0) ?> / <?= (int)($jobs['total'] ?? 0) ?></div><div class="label">jobs completed</div></div>
+    <div class="card stat-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+      <div class="value" id="stat-online"><?= $s['providers_online'] ?></div>
+      <div class="label">providers online</div>
+    </div>
+    <div class="card stat-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      <div class="value" id="stat-hours"><?= $s['compute_hours_donated'] ?></div>
+      <div class="label">compute-hours donated</div>
+    </div>
+    <div class="card stat-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="value" id="stat-jobs"><?= $s['jobs_done'] ?> / <?= $s['jobs_total'] ?></div>
+      <div class="label">jobs completed</div>
+    </div>
   </div>
 
-  <h2>Being shared for free, right now</h2>
-  <?php if ($online === 0): ?>
-    <div class="empty">Nobody's online right now -- <a href="register.php" style="color:var(--accent-2)">be the first to share something</a>.</div>
-  <?php else: ?>
-    <div class="card" style="margin-bottom:20px;">
-      <p style="margin:0 0 12px; color:var(--muted); font-size:14px;">
-        <?= $totalCores ?> CPU cores and <?= number_format($totalRamMb / 1024, 1) ?> GB RAM
-        donated across <?= $online ?> machine<?= $online === 1 ? '' : 's' ?><?= $gpuProviders > 0 ? " ($gpuProviders with a GPU)" : '' ?>.
-      </p>
-      <?php if (!empty($hostedModels)): ?>
-        <p style="margin:0 0 10px; color:var(--muted); font-size:13px;">LLM models available for text generation:</p>
-        <div class="tags">
-          <?php foreach ($hostedModels as $model): ?>
-            <span class="tag"><?= e($model) ?></span>
-          <?php endforeach; ?>
-        </div>
+  <div class="section">
+    <h2>Being shared for free, right now</h2>
+    <div id="sharing-block">
+      <?php if ($s['providers_online'] === 0): ?>
+        <div class="card empty">Nobody's online right now -- <a href="register.php" style="color:var(--accent-2)">be the first to share something</a>.</div>
       <?php else: ?>
-        <p style="margin:0; color:var(--muted); font-size:13px;">No one's hosting an LLM for generation right now -- only raw compute (tensor ops, ONNX inference).</p>
+        <div class="card">
+          <p style="margin:0 0 12px; color:var(--muted); font-size:14px;" id="sharing-summary">
+            <?= $s['total_cores'] ?> CPU cores and <?= number_format($s['total_ram_mb'] / 1024, 1) ?> GB RAM
+            donated across <?= $s['providers_online'] ?> machine<?= $s['providers_online'] === 1 ? '' : 's' ?><?= $s['gpu_providers'] > 0 ? " ({$s['gpu_providers']} with a GPU)" : '' ?>.
+          </p>
+          <?php if (!empty($s['hosted_models'])): ?>
+            <p style="margin:0 0 10px; color:var(--muted); font-size:13px;">LLM models available for text generation:</p>
+            <div class="tags" id="hosted-models-tags">
+              <?php foreach ($s['hosted_models'] as $model): ?>
+                <span class="tag"><?= e($model) ?></span>
+              <?php endforeach; ?>
+            </div>
+          <?php else: ?>
+            <p style="margin:0; color:var(--muted); font-size:13px;" id="hosted-models-empty">No one's hosting an LLM for generation right now -- only raw compute (tensor ops, ONNX inference).</p>
+          <?php endif; ?>
+        </div>
       <?php endif; ?>
     </div>
-  <?php endif; ?>
-
-  <h2>Credit leaderboard</h2>
-  <?php if (empty($leaderboard)): ?>
-    <div class="empty">Nobody's shared or used compute here yet -- be the first.</div>
-  <?php else: ?>
-    <table>
-      <tr><th>account</th><th>credits</th></tr>
-      <?php foreach ($leaderboard as $row): ?>
-        <tr><td><?= e($row['name']) ?></td><td><?= number_format((float)$row['credits'], 1) ?></td></tr>
-      <?php endforeach; ?>
-    </table>
-  <?php endif; ?>
-
-  <div class="cta">
-    <p>Donate spare CPU/RAM/GPU, or point your Omnigent agent at community-hosted
-       open models -- both start with an account and an API key.</p>
-    <a href="register.php">Get your API key &rarr;</a>
   </div>
 
-  <footer>Nothing here executes remote code -- providers only ever run their own
-    fixed, audited handlers on data-only payloads. See the
-    <a href="https://github.com/mexmarv/omnigrid">README</a> for how it works.</footer>
+  <div class="grid-2 section">
+    <div>
+      <h2>Leaderboard</h2>
+      <p class="subnote">Bragging rights only -- credits aren't spendable, just recognition for what you've contributed.</p>
+      <div class="card" style="padding: 6px 0;" id="leaderboard-block">
+        <?php if (empty($s['leaderboard'])): ?>
+          <div class="empty">Nobody's shared or used compute here yet -- be the first.</div>
+        <?php else: ?>
+          <?php foreach ($s['leaderboard'] as $i => $row): ?>
+            <?php $rankClass = $i === 0 ? 'gold' : ($i === 1 ? 'silver' : ($i === 2 ? 'bronze' : '')); ?>
+            <div class="rank-row">
+              <div class="rank-badge <?= $rankClass ?>"><?= $i + 1 ?></div>
+              <div class="name"><?= e($row['name']) ?></div>
+              <div class="credits"><?= number_format($row['credits'], 1) ?></div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <div>
+      <h2>Recent activity</h2>
+      <p class="subnote">The last few jobs completed on the network.</p>
+      <div class="card" style="padding: 6px 0;" id="activity-block">
+        <?php if (empty($s['recent_activity'])): ?>
+          <div class="empty">Nothing's run yet.</div>
+        <?php else: ?>
+          <?php foreach ($s['recent_activity'] as $job): ?>
+            <div class="activity-row" data-finished-at="<?= $job['finished_at'] ?>">
+              <div><?= e(friendly_task_type($job['task_type'])) ?></div>
+              <div class="when"><?= number_format($job['compute_seconds'], 2) ?>s compute &middot; <span class="rel-time"></span></div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+
+  <div class="cta-panel">
+    <p>Donate spare CPU/RAM/GPU, or point your Omnigent/Claude Code/Cursor agent at
+       community-hosted open models -- both start with an account and an API key.</p>
+    <a class="btn" href="register.php">Get your API key &rarr;</a>
+  </div>
+
+  <footer>
+    <span>Nothing here executes remote code -- providers only ever run their own
+      fixed, audited handlers on data-only payloads.</span>
+    <span><a href="https://github.com/mexmarv/omnigrid">README &amp; source</a></span>
+  </footer>
 </div>
+
+<script>
+function relativeTime(unixSeconds) {
+  const diff = Math.max(0, (Date.now() / 1000) - unixSeconds);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + ' hr ago';
+  return Math.floor(diff / 86400) + ' d ago';
+}
+function renderRelativeTimes() {
+  document.querySelectorAll('.activity-row').forEach(function (row) {
+    const el = row.querySelector('.rel-time');
+    if (el) el.textContent = relativeTime(parseFloat(row.dataset.finishedAt));
+  });
+}
+renderRelativeTimes();
+setInterval(renderRelativeTimes, 30000);
+
+async function refreshStats() {
+  try {
+    const res = await fetch('api/stats.php');
+    const s = await res.json();
+    document.getElementById('stat-online').textContent = s.providers_online;
+    document.getElementById('stat-hours').textContent = s.compute_hours_donated;
+    document.getElementById('stat-jobs').textContent = s.jobs_done + ' / ' + s.jobs_total;
+    // Leaderboard, sharing block, and activity feed refresh on next full page
+    // load -- keeping this lightweight avoids rebuilding DOM structures (and
+    // their event state) on every poll for data that rarely changes second to second.
+  } catch (e) { /* offline or mid-deploy -- just skip this tick */ }
+}
+setInterval(refreshStats, 15000);
+</script>
+
 </body>
 </html>

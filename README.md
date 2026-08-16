@@ -227,19 +227,31 @@ that's what you ask for by name once it's wired up.
 <details>
 <summary><b>Omnigent</b> -- Databricks' open-source meta-harness</summary>
 
-An agent *is* a YAML file (a `prompt`, an `executor`, and a `tools`
-section) -- that YAML is the interface for wiring in external tools. You
-either hand-edit it, or describe what you want in any Omnigent chat and
-it authors the file for you.
+Omnigent doesn't have a settings screen for adding tools -- it's chat-first.
+An agent *is* a YAML file underneath (a `prompt`, an `executor`, a `tools`
+section), but you don't go find that file and hand-edit it: you describe
+what you want in Omnigent's own "Describe a task to start a new
+session..." box, and it authors the config for you. So paste this in
+(swap in your real API key from [chanza.ai/register.php](https://chanza.ai/register.php) --
+that page also gives you this exact prompt pre-filled):
+
+```
+Set up a new agent with an MCP tool called "omnigrid" over HTTP, pointing
+at https://chanza.ai/mcp.php, with an Authorization header set to
+"Bearer your-api-key". It should be able to call list_models,
+offload_llm_generate, and offload_tensor_op through that tool.
+```
+
+Then, once it's wired up, just ask for the shared resource in plain language:
+
+> List the models available on Omnigrid, then use whichever one is hosted
+> to write a two-sentence summary of why octopuses are considered
+> intelligent.
+
+Prefer hand-editing the agent file yourself (or Omnigent handed you one
+you want to inspect/tweak)? Here's the equivalent YAML `tools:` block:
 
 ```yaml
-name: my_agent
-prompt: |
-  You are a helpful assistant with access to the Omnigrid community
-  compute network via the omnigrid tool.
-executor:
-  harness: claude-sdk   # or codex, cursor, etc. -- whatever you're already using
-  model: your-model-here
 tools:
   omnigrid:
     type: mcp
@@ -247,16 +259,6 @@ tools:
     headers:
       Authorization: "Bearer your-api-key"
 ```
-
-Run it and ask for the shared resource in plain language:
-
-```bash
-omnigent run my_agent.yaml
-```
-
-> List the models available on Omnigrid, then use whichever one is hosted
-> to write a two-sentence summary of why octopuses are considered
-> intelligent.
 
 Prefer a local process over the hosted endpoint (fully private setup, no
 network hop)? `mcp_server/server.py` does the same tools over stdio --
