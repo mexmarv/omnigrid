@@ -71,6 +71,45 @@ function model_name_from_task_type(string $taskType): ?string {
     return null;
 }
 
+/** Which task_type families ('llm_infer', 'vlm_infer') a model name is
+ * currently advertised under by an online provider -- empty if nobody's
+ * hosting it under either right now. Lets offload_llm_generate/
+ * offload_vlm_generate catch a family mismatch (or a typo'd/unhosted name)
+ * before queuing a job no provider will ever claim, instead of leaving the
+ * caller to poll check_job_result forever for an answer that's never coming. */
+function hosted_families(PDO $pdo, string $modelName): array {
+    $cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;
+    $stmt = $pdo->prepare('SELECT task_types FROM providers WHERE last_heartbeat >= ?');
+    $stmt->execute([$cutoff]);
+    $families = [];
+    foreach ($stmt->fetchAll() as $row) {
+        foreach (explode(',', $row['task_types']) as $taskType) {
+            foreach (['llm_infer', 'vlm_infer'] as $family) {
+                if ($taskType === "$family:$modelName") {
+                    $families[$family] = true;
+                }
+            }
+        }
+    }
+    return array_keys($families);
+}
+
+/** True if some online provider currently advertises this exact task_type.
+ * Used to catch a job stuck 'queued'/'assigned' because the provider that
+ * made it valid at submission time has since gone offline -- rather than
+ * leaving check_job_result to report 'still queued' forever. */
+function task_type_has_online_provider(PDO $pdo, string $taskType): bool {
+    $cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;
+    $stmt = $pdo->prepare('SELECT task_types FROM providers WHERE last_heartbeat >= ?');
+    $stmt->execute([$cutoff]);
+    foreach ($stmt->fetchAll() as $row) {
+        if (in_array($taskType, explode(',', $row['task_types']), true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Model names, deduped, from whichever providers are currently online. */
 function list_hosted_models(PDO $pdo): array {
     $cutoff = microtime(true) - HEARTBEAT_TIMEOUT_S;

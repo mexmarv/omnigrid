@@ -197,43 +197,65 @@ switch ($method) {
 
         if ($name === 'offload_llm_generate') {
             $modelName = $args['model_name'] ?? '';
-            $payload = [
-                'prompt' => $args['prompt'] ?? '',
-                'max_tokens' => (int)($args['max_tokens'] ?? 2048),
-                'temperature' => (float)($args['temperature'] ?? 0.7),
-            ];
-            if (!empty($args['system'])) {
-                $payload['system'] = $args['system'];
-            }
-            $payloadB64 = base64_encode(json_encode($payload));
-            $job = submit_job_and_wait($pdo, (int)$account['id'], "llm_infer:$modelName", $payloadB64,
-                                        1.0, 1024, 300, INITIAL_WAIT_S);
-            if ($job['status'] === 'done') {
-                tool_result_from_job($id, $job);
-            } elseif ($job['status'] === 'timeout') {
-                tool_pending_result($id, $job['job_id']);
+            $families = hosted_families($pdo, $modelName);
+            if (!in_array('llm_infer', $families, true)) {
+                if (in_array('vlm_infer', $families, true)) {
+                    tool_error($id, "'$modelName' is currently hosted as a vision-language model, not " .
+                        "a text one -- call offload_vlm_generate instead.");
+                } else {
+                    tool_error($id, "No online provider is currently hosting a text model named " .
+                        "'$modelName'. Call list_models to see what's actually available right now.");
+                }
             } else {
-                tool_error($id, $job['error'] ?? 'Job failed.');
+                $payload = [
+                    'prompt' => $args['prompt'] ?? '',
+                    'max_tokens' => (int)($args['max_tokens'] ?? 2048),
+                    'temperature' => (float)($args['temperature'] ?? 0.7),
+                ];
+                if (!empty($args['system'])) {
+                    $payload['system'] = $args['system'];
+                }
+                $payloadB64 = base64_encode(json_encode($payload));
+                $job = submit_job_and_wait($pdo, (int)$account['id'], "llm_infer:$modelName", $payloadB64,
+                                            1.0, 1024, 300, INITIAL_WAIT_S);
+                if ($job['status'] === 'done') {
+                    tool_result_from_job($id, $job);
+                } elseif ($job['status'] === 'timeout') {
+                    tool_pending_result($id, $job['job_id']);
+                } else {
+                    tool_error($id, $job['error'] ?? 'Job failed.');
+                }
             }
         } elseif ($name === 'offload_vlm_generate') {
             $modelName = $args['model_name'] ?? '';
-            $payload = [
-                'prompt' => $args['prompt'] ?? '',
-                'max_tokens' => (int)($args['max_tokens'] ?? 2048),
-            ];
-            if (!empty($args['image_b64'])) {
-                $payload['image_b64'] = $args['image_b64'];
-                $payload['image_mime'] = $args['image_mime'] ?? 'image/jpeg';
-            }
-            $payloadB64 = base64_encode(json_encode($payload));
-            $job = submit_job_and_wait($pdo, (int)$account['id'], "vlm_infer:$modelName", $payloadB64,
-                                        1.0, 512, 60, INITIAL_WAIT_S);
-            if ($job['status'] === 'done') {
-                tool_result_from_job($id, $job);
-            } elseif ($job['status'] === 'timeout') {
-                tool_pending_result($id, $job['job_id']);
+            $families = hosted_families($pdo, $modelName);
+            if (!in_array('vlm_infer', $families, true)) {
+                if (in_array('llm_infer', $families, true)) {
+                    tool_error($id, "'$modelName' is currently hosted as a text-only model, not a " .
+                        "vision-language one -- call offload_llm_generate instead.");
+                } else {
+                    tool_error($id, "No online provider is currently hosting a vision-language model " .
+                        "named '$modelName'. Call list_models to see what's actually available right now.");
+                }
             } else {
-                tool_error($id, $job['error'] ?? 'Job failed.');
+                $payload = [
+                    'prompt' => $args['prompt'] ?? '',
+                    'max_tokens' => (int)($args['max_tokens'] ?? 2048),
+                ];
+                if (!empty($args['image_b64'])) {
+                    $payload['image_b64'] = $args['image_b64'];
+                    $payload['image_mime'] = $args['image_mime'] ?? 'image/jpeg';
+                }
+                $payloadB64 = base64_encode(json_encode($payload));
+                $job = submit_job_and_wait($pdo, (int)$account['id'], "vlm_infer:$modelName", $payloadB64,
+                                            1.0, 512, 60, INITIAL_WAIT_S);
+                if ($job['status'] === 'done') {
+                    tool_result_from_job($id, $job);
+                } elseif ($job['status'] === 'timeout') {
+                    tool_pending_result($id, $job['job_id']);
+                } else {
+                    tool_error($id, $job['error'] ?? 'Job failed.');
+                }
             }
         } elseif ($name === 'offload_tensor_op') {
             $payload = ['op' => $args['op'] ?? '', 'a_npy_b64' => base64_encode(npy_encode($args['a'] ?? []))];
@@ -263,6 +285,16 @@ switch ($method) {
                 tool_result_from_job($id, $job);
             } elseif ($job['status'] === 'failed') {
                 tool_error($id, $job['error'] ?? 'Job failed.');
+            } elseif ($job['status'] === 'queued' && !task_type_has_online_provider($pdo, $job['task_type'])) {
+                // Nobody's advertising this task_type right now -- whoever was hosting it either
+                // never existed (a typo'd/unhosted model_name that slipped through before this check
+                // was added) or has since gone offline. Fail it here instead of leaving the caller to
+                // poll forever for an answer that's never coming.
+                $error = "No online provider is currently hosting this job's model -- it went offline, " .
+                    "or was never actually available. Call list_models and try again with a hosted model.";
+                $pdo->prepare("UPDATE jobs SET status='failed', error=?, finished_at=? WHERE id = ?")
+                    ->execute([$error, microtime(true), $jobId]);
+                tool_error($id, $error);
             } else {
                 // still queued/assigned -- wait a little more before answering, same pattern as the
                 // initial call, so the agent doesn't need its own delay between polls.
